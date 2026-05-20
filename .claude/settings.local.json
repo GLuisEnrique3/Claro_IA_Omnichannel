@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\Enrique Guerra\\\\Documents\\\\Claro Insurance\\\\IA\\\\Orchestrated_model\" -Recurse -Directory)",
+      "Bash(Select-Object -ExpandProperty FullName)",
+      "Bash(Sort-Object)",
+      "PowerShell(\\(Get-Item \"c:\\\\Users\\\\Enrique Guerra\\\\Documents\\\\Claro Insurance\\\\IA\\\\Orchestrated_model\\\\chroma_db\\\\chroma.sqlite3\"\\).LastWriteTime)",
+      "Bash(python -c ' *)",
+      "Bash(python scripts/precalcular_embeddings.py)",
+      "Bash(python scripts/precalcular_use_cases.py)"
+    ]
+  }
+}
