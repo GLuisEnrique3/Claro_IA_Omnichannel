@@ -37,6 +37,7 @@ DOCUMENTS = [
         "chunking": "sliding",
         "metadata": {
             "carrier": "OSCAR",
+            "line_of_business":"ACA",
             "category": "instructivos_aca"
         }
     },
@@ -47,6 +48,7 @@ DOCUMENTS = [
         "chunking": "sliding",
         "metadata": {
             "carrier": "AMBETTER",
+            "line_of_business":"ACA",
             "category": "instructivos_aca"
         }
     },
@@ -57,6 +59,7 @@ DOCUMENTS = [
         "chunking": "sliding",
         "metadata": {
             "carrier": "FLORIDA BLUE",
+            "line_of_business":"ACA",
             "category": "instructivos_aca"
         }
     },
@@ -67,6 +70,7 @@ DOCUMENTS = [
         "chunking": "sliding",
         "metadata": {
             "carrier": "MOLINA",
+            "line_of_business":"ACA",
             "category": "instructivos_aca"
         }
     },
@@ -77,6 +81,7 @@ DOCUMENTS = [
         "chunking": "sliding",
         "metadata": {
             "carrier": "UNITED HEALTH CARE",
+            "line_of_business":"ACA",
             "category": "instructivos_aca"
         }
     },
@@ -87,6 +92,7 @@ DOCUMENTS = [
         "chunking": "sliding",
         "metadata": {
             "carrier": "CIGNA",
+            "line_of_business":"ACA",
             "category": "instructivos_aca"
         }
     },
@@ -97,6 +103,7 @@ DOCUMENTS = [
         "chunking": "sliding",
         "metadata": {
             "carrier": "FRIDAY",
+            "line_of_business":"ACA",
             "category": "instructivos_aca"
         }
     },
@@ -107,6 +114,7 @@ DOCUMENTS = [
         "chunking": "sliding",
         "metadata": {
             "carrier": "AVMED",
+            "line_of_business":"ACA",
             "category": "instructivos_aca"
         }
     },
@@ -117,6 +125,7 @@ DOCUMENTS = [
         "chunking": "sliding",
         "metadata": {
             "carrier": "BlueCross BlueShield Texas",
+            "line_of_business":"ACA",
             "category": "instructivos_aca"
         }
     },
@@ -127,6 +136,7 @@ DOCUMENTS = [
         "chunking": "sliding",
         "metadata": {
             "carrier": "BlueCross BlueShield NC SC",
+            "line_of_business":"ACA",
             "category": "instructivos_aca"
         }
     },
@@ -137,16 +147,7 @@ DOCUMENTS = [
         "chunking": "sliding",
         "metadata": {
             "carrier": "Anthem BlueCross BlueShield",
-            "category": "instructivos_aca"
-        }
-    },
-
-    {
-        "filename": "CM-IN-14 Instructivo Gestión de contratos con AETNA ACA.pdf",
-        "collection": "instructivos_contratos_aca",
-        "chunking": "sliding",
-        "metadata": {
-            "carrier": "AETNA",
+            "line_of_business":"ACA",
             "category": "instructivos_aca"
         }
     },
@@ -157,6 +158,7 @@ DOCUMENTS = [
         "chunking": "sliding",
         "metadata": {
             "carrier": "Amerihealth Caritas",
+            "line_of_business":"ACA",
             "category": "instructivos_aca"
         }
     },
@@ -167,6 +169,7 @@ DOCUMENTS = [
         "chunking": "sliding",
         "metadata": {
             "carrier": "Caresource",
+            "line_of_business":"ACA",
             "category": "instructivos_aca"
         }
     },
@@ -177,6 +180,7 @@ DOCUMENTS = [
         "chunking": "sliding",
         "metadata": {
             "carrier": "Ascension",
+            "line_of_business":"ACA",
             "category": "instructivos_aca"
         }
     },
@@ -187,10 +191,152 @@ DOCUMENTS = [
         "chunking": "sliding",
         "metadata": {
             "carrier": "ALLIANT",
+            "line_of_business":"ACA",
             "category": "instructivos_aca"
         }
     },
-]
+    {
+        "filename": "CM-IN-26 Instructivo Gestión de contratos con AVMED MEDICARE.pdf",
+        "collection": "instructivos_contratos_medicare",
+        "chunking": "sliding",
+        "metadata": {
+            "carrier": "AVMED",
+            "line_of_business":"MEDICARE",
+            "category": "instructivos_medicare"
+        }
+    },
+    {
+        "filename": "CM-IN-27 Instructivo Gestión de Contratos con UNITED HEALTH CARE MEDICARE.pdf",
+        "collection": "instructivos_contratos_medicare",
+        "chunking": "sliding",
+        "metadata": {
+            "carrier": "UNITED HEALTH CARE",
+            "line_of_business":"MEDICARE",
+            "category": "instructivos_medicare"
+        }
+    },
+    {
+        "filename": "CM-IN-28 Instructivo Gestión de contratos con AETNA MEDICARE.pdf",
+        "collection": "instructivos_contratos_medicare",
+        "chunking": "sliding",
+        "metadata": {
+            "carrier": "AETNA",
+            "line_of_business":"MEDICARE",
+            "category": "instructivos_medicare"
+        }
+    },
+
+    {
+        "filename": "CM-IN-29 Instructivo de Gestión de Contratos con HUMANA MEDICARE.pdf",
+        "collection": "instructivos_contratos_medicare",
+        "chunking": "sliding",
+        "metadata": {
+            "carrier": "HUMANA",
+            "line_of_business":"MEDICARE",
+            "category": "instructivos_medicare"
+        }
+    },
+        {
+        "filename": "CM-IN-30 Instructivo de Gestión de Contratos con SIMPLY MEDICARE.pdf",
+        "collection": "instructivos_contratos_medicare",
+        "chunking": "sliding",
+        "metadata": {
+            "carrier": "SIMPLY",
+            "line_of_business":"MEDICARE",
+            "category": "instructivos_medicare"
+        }
+    },
+    {
+        "filename": "CM-IN-31 Instructivo Gestión de contratos con OSCAR MEDICARE.pdf",
+        "collection": "instructivos_contratos_medicare",
+        "chunking": "sliding",
+        "metadata": {
+            "carrier": "OSCAR",
+            "line_of_business":"MEDICARE",
+            "category": "instructivos_medicare"
+        }
+    },
+    {
+        "filename": "CM-IN-34 Instructivo Gestión de contratos con WELLCARE MEDICARE.pdf",
+        "collection": "instructivos_contratos_medicare",
+        "chunking": "sliding",
+        "metadata": {
+            "carrier": "OSCAR",
+            "line_of_business":"MEDICARE",
+            "category": "instructivos_medicare"
+        }
+    },
+    {
+        "filename": "CM-IN-21 Instructivo Gestión de contratos con National Life LIFE.pdf",
+        "collection": "instructivos_contratos_life",
+        "chunking": "sliding",
+        "metadata": {
+            "carrier": "NATIONAL LIFE",
+            "line_of_business":"LIFE",
+            "category": "instructivos_life"
+        }
+    },
+    {
+        "filename": "CM-IN-22 Instructivo Gestión de contratos con FORESTERS LIFE.pdf",
+        "collection": "instructivos_contratos_life",
+        "chunking": "sliding",
+        "metadata": {
+            "carrier": "FORESTERS",
+            "line_of_business":"LIFE",
+            "category": "instructivos_life"
+        }
+    },
+    {
+        "filename": "CM-IN-24 Instructivo Gestión de contratos con Ameritas LIFE.pdf",
+        "collection": "instructivos_contratos_life",
+        "chunking": "sliding",
+        "metadata": {
+            "carrier": "AMERITAS",
+            "line_of_business":"LIFE",
+            "category": "instructivos_life"
+        }
+    },
+    {
+        "filename": "CM-IN-25 Instructivo Gestión de contratos con ATHENE LIFE.pdf",
+        "collection": "instructivos_contratos_life",
+        "chunking": "sliding",
+        "metadata": {
+            "carrier": "ATHENE",
+            "line_of_business":"LIFE",
+            "category": "instructivos_life"
+        }
+    },
+    {
+        "filename": "CM-IN-35 Instructivo Gestión de contratos con AMERITAS (SUPPLEMENTARY).pdf",
+        "collection": "instructivos_contratos_supplementary",
+        "chunking": "sliding",
+        "metadata": {
+            "carrier": "AMERITAS",
+            "line_of_business":"SUPPLEMENTARY",
+            "category": "instructivos_supplementary"
+        }
+    },
+    {
+        "filename": "CM-IN-37 Instructivo Gestión de contratos con United Health One SUPPLEMENTARY.pdf",
+        "collection": "instructivos_contratos_supplementary",
+        "chunking": "sliding",
+        "metadata": {
+            "carrier": "AMERITAS",
+            "line_of_business":"SUPPLEMENTARY",
+            "category": "instructivos_supplementary"
+        }
+    },
+    {
+        "filename": "CM-IN-38 Instructivo Gestión de contratos con CIGNA (SUPPLEMENTARY).pdf",
+        "collection": "instructivos_contratos_supplementary",
+        "chunking": "sliding",
+        "metadata": {
+            "carrier": "CIGNA",
+            "line_of_business":"SUPPLEMENTARY",
+            "category": "instructivos_supplementary"
+        }
+    }
+    ]
 
 # =========================================================
 # PDF EXTRACTION

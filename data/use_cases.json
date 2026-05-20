@@ -16,6 +16,7 @@
             "Cuántos agentes tienen contratos pendientes con Humana",
             "Necesito saber cuántos contratos están en blackout o in progress"
           ],
+          "instructions": [],
           "sql": "SELECT COUNT(Distinct p.Id) as Opp_Open FROM `claroinsurance-dataplatform.claro_bi.vw_opportunity` p LEFT JOIN `claroinsurance-dataplatform.claro_bi.dim_opp_stage` s ON s.key_stage = p.key_stage LEFT JOIN `claroinsurance-dataplatform.claro_bi.dim_cslb` o ON o.Id = p.CarrierStateLineOfBusiness_c LEFT JOIN `claroinsurance-dataplatform.salesforce_claro.contact` c ON c.Id = p.Contact__c LEFT JOIN `claroinsurance-dataplatform.claro_bi.dim_account_2` a ON a.Id = c.AccountId  LEFT JOIN `claroinsurance-dataplatform.salesforce_claro.account_executives` ae on c.AE__c = ae.Id WHERE a.Name_Agencies != 'Agency Test' AND a.Name_Agencies IS NOT NULL AND s.StageName IN ('Blackout','Carrier Confirmation','Carrier link to be sent','In Progress - Action Needed','Missing Agent Information','Missing Certification','On hold','Pending Release','Started Contracting') {dynamic_filters}",
           "entity_resolution" : "como_debe_responderse_esta_consulta",
           "parametros": ["c.NPN__c","a.Name_Agencies","o.Carrier","o.State","o.Line_Of_Business","s.StageName","s.Sub_stage","ae.Name"],
@@ -43,6 +44,7 @@
             "Ver la fecha de cierre y etapa de una oportunidad",
             "Buscar el status de un contrato por NPN"
           ],
+          "instructions": [],
           "sql": "SELECT p.Id, p.CloseDate, p.CreatedDate, p.StageName, p.Sub_Stage FROM `claroinsurance-dataplatform.claro_bi.vw_opportunity` p LEFT JOIN `claroinsurance-dataplatform.claro_bi.dim_opp_stage` s ON s.key_stage = p.key_stage LEFT JOIN `claroinsurance-dataplatform.claro_bi.dim_cslb` o ON o.Id = p.CarrierStateLineOfBusiness_c LEFT JOIN `claroinsurance-dataplatform.salesforce_claro.contact` c ON c.Id = p.Contact__c LEFT JOIN `claroinsurance-dataplatform.salesforce_claro.account_executives` ae on c.AE__c = ae.Id  LEFT JOIN `claroinsurance-dataplatform.claro_bi.dim_account_2` a ON a.Id = c.AccountId WHERE a.Name_Agencies != 'Agency Test' AND a.Name_Agencies IS NOT NULL {dynamic_filters}  LIMIT 10",
           "parametros": ["p.Id","c.NPN__c","a.Name_Agencies","o.Carrier","o.State","o.Line_Of_Business","s.StageName","s.Sub_stage","ae.Name"],
           "entity_resolution" : "como_debe_responderse_esta_consulta",
@@ -71,6 +73,7 @@
             "Hay un contrato que lleva semanas sin avanzar, qué pasa",
             "Deseo saber porque no se ha aprobado mis contratos"
           ],
+          "instructions": [],
           "sql":"SELECT p.Id, p.CreatedDate, p.StageName, p.Sub_Stage, op.Internal_Notes__c FROM `claroinsurance-dataplatform.claro_bi.vw_opportunity` p LEFT JOIN `claroinsurance-dataplatform.claro_bi.dim_opp_stage` s ON s.key_stage = p.key_stage LEFT JOIN `claroinsurance-dataplatform.claro_bi.dim_cslb` o ON o.Id = p.CarrierStateLineOfBusiness_c LEFT JOIN `claroinsurance-dataplatform.salesforce_claro.contact` c ON c.Id = p.Contact__c LEFT JOIN `claroinsurance-dataplatform.salesforce_claro.account_executives` ae on c.AE__c = ae.Id LEFT JOIN `claroinsurance-dataplatform.claro_bi.dim_account_2` a ON a.Id = c.AccountId LEFT JOIN `claroinsurance-dataplatform.salesforce_claro.opportunity` op ON op.Id = p.Id WHERE a.Name_Agencies != 'Agency Test' AND a.Name_Agencies IS NOT NULL {dynamic_filters} LIMIT 15",
           "parametros": ["p.Id","c.NPN__c","a.Name_Agencies","o.Carrier","o.State","o.Line_Of_Business","s.StageName","s.Sub_stage","ae.Name"],
           "entity_resolution" : "como_debe_responderse_esta_consulta",
@@ -94,12 +97,13 @@
           "semantic_examples": [
             "Cómo se gestiona un contrato ACA con Ambetter",
             "Quiero ver el instructivo de contratos con Humana ACA",
-            "Cuál es el proceso para contratar con Florida Blue",
+            "Cuál es el proceso para contratar con Florida Blue ACA",
             "Dame el procedimiento para contratar con Molina ACA",
             "Cómo se hace el contrato con United Health Care ACA",
             "Necesito el instructivo de contratación ACA de Aetna",
-            "Qué documentos necesito para contratar con Oscar"
+            "Qué documentos necesito para contratar con Oscar ACA"
           ],
+          "instructions": [],
           "coleccion_chroma": "instructivos_contratos_aca",
           "embedding_model": "all-MiniLM-L6-v2",
           "carrier_detection": true,
@@ -122,6 +126,80 @@
                        "CM-IN-17 Instructivo Gestión de contratos con Ascension ACA",
                        "CM-IN-18 Contract Management with ALLIANT ACA"
                       ]
+        },
+        {
+        "id": "5",
+          "texto": "Instructivo Gestión de Contratos Medicare",
+          "tipo": "rag",
+          "semantic_examples": [
+            "Cómo se gestiona un contrato Medicare",
+            "Quiero ver el instructivo de contratos con Medicare",
+            "Cuál es el proceso para contratar con Medicare",
+            "Dame el procedimiento para contratar con Medicare",
+            "Cómo se hace el contrato con Medicare",
+            "Necesito el instructivo de contratación de Medicare",
+            "Qué documentos necesito para contratar con Medicare"
+          ],
+          "instructions": [],
+          "coleccion_chroma": "instructivos_contratos_medicare",
+          "embedding_model": "all-MiniLM-L6-v2",
+          "carrier_detection": true,
+          "carrier_detection_umbral": 0.55,
+          "ejemplos": ["CM-IN-27 Instructivo Gestión de Contratos con UNITED HEALTH CARE MEDICARE",
+                       "CM-IN-30 Instructivo de Gestión de Contratos con SIMPLY MEDICARE",
+                       "CM-IN-28 Instructivo Gestión de contratos con AETNA MEDICARE",
+                       "CM-IN-34 Instructivo Gestión de contratos con WELLCARE MEDICARE",
+                       "CM-IN-31 Instructivo Gestión de contratos con OSCAR MEDICARE",
+                       "CM-IN-26 Instructivo Gestión de contratos con AVMED MEDICARE",
+                       "CM-IN-29 Instructivo de Gestión de Contratos con HUMANA MEDICARE"
+                      ]
+        },
+        {
+        "id": "6",
+          "texto": "Instructivo Gestión de Contratos Life",
+          "tipo": "rag",
+          "semantic_examples": [
+            "Cómo se gestiona un contrato Life",
+            "Quiero ver el instructivo de contratos con Life",
+            "Cuál es el proceso para contratar con Life",
+            "Dame el procedimiento para contratar con Life",
+            "Cómo se hace el contrato con Life",
+            "Necesito el instructivo de contratación de Life",
+            "Qué documentos necesito para contratar con Life"
+          ],
+          "instructions": [],
+          "coleccion_chroma": "instructivos_contratos_life",
+          "embedding_model": "all-MiniLM-L6-v2",
+          "carrier_detection": true,
+          "carrier_detection_umbral": 0.55,
+          "ejemplos": ["CM-IN-21 Instructivo Gestión de contratos con National Life LIFE",
+                       "CM-IN-22 Instructivo Gestión de contratos con FORESTERS LIFE",
+                       "CM-IN-24 Instructivo Gestión de contratos con Ameritas LIFE",
+                       "CM-IN-25 Instructivo Gestión de contratos con ATHENE LIFE"
+                      ]
+        },
+        {
+        "id": "7",
+          "texto": "Instructivo Gestión de Contratos Supplementario",
+          "tipo": "rag",
+          "semantic_examples": [
+            "Cómo se gestiona un contrato Supplementario",
+            "Quiero ver el instructivo de contratos con Supplementario",
+            "Cuál es el proceso para contratar con Supplementario",
+            "Dame el procedimiento para contratar con Supplementario",
+            "Cómo se hace el contrato con Supplementario",
+            "Necesito el instructivo de contratación de Supplementario",
+            "Qué documentos necesito para contratar con Supplementario"
+          ],
+          "instructions": [],
+          "coleccion_chroma": "instructivos_contratos_supplementary",
+          "embedding_model": "all-MiniLM-L6-v2",
+          "carrier_detection": true,
+          "carrier_detection_umbral": 0.55,
+          "ejemplos": ["CM-IN-35 Instructivo Gestión de contratos con AMERITAS (SUPPLEMENTARY)",
+                       "CM-IN-37 Instructivo Gestión de contratos con United Health One SUPPLEMENTARY",
+                       "CM-IN-38 Instructivo Gestión de contratos con CIGNA (SUPPLEMENTARY)"
+                      ]
         }
       ]
     },
@@ -141,6 +219,7 @@
             "Necesito el resumen de pagos de comisiones por carrier",
             "Cuántas membresías pagadas tuve en el último ciclo"
           ],
+          "instructions": [],
           "sql": "SELECT SUM(SAFE_CAST(p.Net_Payment__c AS FLOAT64)) AS Net_Payment , SUM(SAFE_CAST(p.Members_Paid__c AS INT64)) AS Payment_Memberships FROM `claroinsurance-dataplatform.claro_bi.Payment_Commission` p LEFT JOIN `claroinsurance-dataplatform.claro_bi.dim_cslb` o ON o.Id = p.Carrier_State_line_of_Business__c   LEFT JOIN `claroinsurance-dataplatform.claro_bi.dim_contact` c ON c.Id = p.Contact_pay LEFT JOIN `claroinsurance-dataplatform.claro_bi.dim_account_2` a ON a.Id = c.AccountId LEFT JOIN `claroinsurance-dataplatform.claro_bi.BOB_TD` b ON p.Policy_Number__c = b.Policy_Number__c WHERE p.Main_Payment__c = True AND p.Payment_Type__c = 'Commission' AND p.Payment_Status__c IN ('Paid','Paid by carrier') {dynamic_filters} ",
           "parametros": ["c.NPN__c","a.Name_Agencies","o.Carrier","o.State","o.Line_Of_Business","p.Pay_on_Date__c"],
           "entity_resolution" : "como_debe_responderse_esta_consulta",
@@ -165,6 +244,7 @@
             "Hay comisiones que no se han procesado, cuánto es",
             "Necesito ver qué pagos de comisiones están pendientes de liberación"
           ],
+          "instructions": [],
           "sql": "SELECT SUM(SAFE_CAST(p.Net_Payment__c AS FLOAT64)) AS Net_Payment , SUM(SAFE_CAST(p.Members_Paid__c AS INT64)) AS Payment_Memberships FROM `claroinsurance-dataplatform.claro_bi.Payment_Commission` p LEFT JOIN `claroinsurance-dataplatform.claro_bi.dim_cslb` o ON o.Id = p.Carrier_State_line_of_Business__c   LEFT JOIN `claroinsurance-dataplatform.claro_bi.dim_contact` c ON c.Id = p.Contact_pay LEFT JOIN `claroinsurance-dataplatform.claro_bi.dim_account_2` a ON a.Id = c.AccountId LEFT JOIN `claroinsurance-dataplatform.claro_bi.BOB_TD` b ON p.Policy_Number__c = b.Policy_Number__c WHERE p.Main_Payment__c = True AND p.Payment_Type__c = 'Commission' AND p.Payment_Status__c NOT IN ('Paid','Paid by carrier') {dynamic_filters} ",
           "parametros": ["c.NPN__c","a.Name_Agencies","o.Carrier","o.State","o.Line_Of_Business","p.Pay_on_Date__c"],
           "entity_resolution" : "como_debe_responderse_esta_consulta",
@@ -185,18 +265,36 @@
             "Cuándo se pagan las comisiones del mes",
             "Ver el calendario de pagos de comisiones",
             "Qué días del mes se procesan los pagos de comisiones",
-            "En qué fecha se hace el ciclo de pago de Humana",
+            "En qué fecha se hace el ciclo de pago",
             "Quiero saber el cronograma de pagos de comisiones",
-            "Cuáles son las fechas de corte para el pago de comisiones"
+            "Cuáles son las fechas de corte para el pago de comisiones",
+            "Por qué no me han pagado mis comisiones todavía, cuándo es el próximo pago"
           ],
+          "instructions": [],
           "coleccion_chroma": "calendario_comisiones",
           "embedding_model": "all-MiniLM-L6-v2",
           "ejemplos": ["Calendario Pago Comisiones"]
+        },
+        {
+          "id": "4",
+          "texto": "Porque no me han pagado mis comisiones",
+          "tipo": "multiple",
+          "invoca": ["2", "3"],
+          "semantic_examples": [
+            "Por qué no me han pagado mis comisiones",
+            "Cuál es la razón por la que no recibí mi pago",
+            "Mis comisiones no llegaron, qué pasó",
+            "No me han depositado mis comisiones, por qué",
+            "Quiero saber por qué mis comisiones están retenidas y cuándo me van a pagar",
+            "Cuál es el problema con mis comisiones, no me han llegado",
+            "Necesito entender por qué no tengo el pago de mis comisiones"
+          ],
+          "instructions": []
         }
       ]
     },
     "C": {
-      "nombre": "Certificaciones",
+      "nombre": "Licencias",
       "preguntas": [
         {
           "id": "1",
@@ -210,6 +308,7 @@
             "Ver los documentos de certificación y cumplimiento",
             "Quiero leer el reglamento sobre comisiones o contratos"
           ],
+          "instructions": [],
           "coleccion_chroma": "documentos_normativos",
           "embedding_model": "all-MiniLM-L6-v2"
         }

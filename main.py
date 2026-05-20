@@ -6,6 +6,7 @@ import datetime
 import re
 import torch
 import chromadb
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 # ── Nombres de meses en español (para parser de fechas) ───────────────────────
@@ -123,6 +124,17 @@ def _input(prompt: str) -> str:
     return valor
 
 
+def _input_sn(prompt: str, con_enter: bool = False) -> str:
+    """Repite el prompt hasta recibir S, N, o (si con_enter=True) Enter vacío."""
+    validas = {"S", "N"}
+    while True:
+        respuesta = _input(prompt).strip().upper()
+        if respuesta in validas or (con_enter and respuesta == ""):
+            return respuesta
+        opciones = "S / N / Enter" if con_enter else "S / N"
+        print(f"  ⚠  Opción no válida. Por favor ingrese: {opciones}.\n")
+
+
 # ── Helpers de UI ──────────────────────────────────────────────────────────────
 def _sep():
     print("━" * 55)
@@ -145,31 +157,111 @@ def _mostrar_instrucciones():
     print("║" + "INSTRUCCIONES DE USO".center(54) + "║")
     print("╚" + "═" * 54 + "╝")
     print("""
+  ══════════════════════════════════════════════════════
+  FLUJO GENERAL DEL SISTEMA
+  ══════════════════════════════════════════════════════
+
   1. IDENTIFICACIÓN
-     Seleccione su tipo de usuario (1-4).
-     El sistema validará su identidad por similitud semántica
-     contra la base de datos de filtros válidos.
+     Al ingresar, seleccione su tipo de usuario:
+       1 — Representante de Agencia
+               Identifíquese con el nombre de su agencia.
+               Sus consultas se filtran automáticamente
+               a los datos de esa agencia.
+       2 — Agente NPN
+               Identifíquese con su número NPN.
+               Sus consultas se filtran a sus propios datos.
+       3 — Management
+               Acceso sin restricción de filtro.
+               Visualiza datos de toda la organización.
 
-  2. CATÁLOGOS
-     Según su perfil, tendrá acceso a:
-       A. Contratos       — consultas sobre oportunidades
-       B. Licencias       — módulo en implementación
-       C. Certificaciones — módulo en implementación
+  2. CONSULTA EN LENGUAJE NATURAL
+     Una vez identificado, escriba su consulta como si
+     le hablara a una persona. El sistema:
+       a) Detecta automáticamente el tema solicitado.
+       b) Extrae filtros mencionados en su consulta.
+       c) Le pide confirmación antes de ejecutar.
+       d) Devuelve el resultado con una explicación.
 
-  3. CONSULTAS DISPONIBLES (Contratos)
-       1 — Cantidad de contratos pendientes
-       2 — Verificar status de un contrato
-       3 — Identificar motivo de retraso
-       4 — Reglamentos e instructivos (RAG sobre documentos)
+  ══════════════════════════════════════════════════════
+  TEMAS QUE PUEDE CONSULTAR
+  ══════════════════════════════════════════════════════
 
-  4. FILTROS DINÁMICOS
-     En consultas SQL puede refinar por Carrier, Estado,
-     Línea de Negocio, Etapa, etc. usando lenguaje natural.
-     Ejemplo: "quiero ver solo ambetter en florida"
+  CONTRATOS
+    · Cantidad de Contratos Pendientes
+    · Verificar status del contrato en el sistema
+    · Identificar motivo del retraso en la aprobación
+    · Instructivo Gestión de Contratos ACA
+    · Instructivo Gestión de Contratos Medicare
+    · Instructivo Gestión de Contratos Life
+    · Instructivo Gestión de Contratos Supplementary
 
-  5. COMANDOS GLOBALES
-       instrucciones / help / ayuda — muestra esta pantalla
-       salir / exit / q             — cierra el sistema
+  PAGOS Y COMISIONES
+    · Comisiones Pagadas
+    · Comisiones Bloqueadas
+    · Calendario Ciclo de Pago de Comisiones
+
+  ══════════════════════════════════════════════════════
+  FILTROS QUE RECONOCE EL SISTEMA
+  ══════════════════════════════════════════════════════
+
+  Puede combinar varios filtros en una misma consulta.
+  El sistema los detecta aunque los escriba en lenguaje
+  natural, sin necesidad de seguir un formato exacto.
+
+  ┌─────────────────┬────────────────────────────────────┐
+  │ FILTRO          │ EJEMPLOS DE USO                    │
+  ├─────────────────┼────────────────────────────────────┤
+  │ Carrier         │ "con Ambetter"                     │
+  │                 │ "de Humana"  /  "solo Aetna"       │
+  ├─────────────────┼────────────────────────────────────┤
+  │ Estado          │ "en Florida"  /  "de Texas"        │
+  │                 │ "para Georgia"                     │
+  ├─────────────────┼────────────────────────────────────┤
+  │ Línea de        │ "de Medicare Advantage"            │
+  │ Negocio         │ "línea ACA"  /  "productos DSNP"   │
+  ├─────────────────┼────────────────────────────────────┤
+  │ Etapa           │ "en estado Blackout"               │
+  │                 │ "etapa In Progress"                │
+  ├─────────────────┼────────────────────────────────────┤
+  │ Sub-etapa       │ "sub-etapa Missing Certification"  │
+  ├─────────────────┼────────────────────────────────────┤
+  │ Agencia         │ "de la agencia Comfort Insurance"  │
+  │                 │ "agentes de Miami Insurance"       │
+  ├─────────────────┼────────────────────────────────────┤
+  │ NPN             │ "del NPN 1234567"                  │
+  │                 │ "agente NPN 9876543"               │
+  ├─────────────────┼────────────────────────────────────┤
+  │ Ejecutivo       │ "ejecutivo Carlos Pérez"           │
+  │                 │ "del AE María López"               │
+  ├─────────────────┼────────────────────────────────────┤
+  │ Fecha de pago   │ "el mes pasado"                    │
+  │                 │ "en mayo 2024"  /  "hace 2 meses"  │
+  │                 │ "este mes"  /  "mayo del 2023"     │
+  └─────────────────┴────────────────────────────────────┘
+
+  ══════════════════════════════════════════════════════
+  EJEMPLOS DE CONSULTAS COMPLETAS
+  ══════════════════════════════════════════════════════
+
+  "Contratos pendientes de Ambetter en Florida"
+  "Cuántos contratos en Blackout tiene la agencia
+   Comfort Insurance con Humana en Texas"
+  "Status del contrato del NPN 1234567"
+  "Por qué está retrasado el contrato del agente
+   NPN 9876543 con Aetna"
+  "Comisiones pagadas con Humana el mes pasado"
+  "Cuánto tengo en comisiones bloqueadas en mayo 2024"
+  "Instructivo para contratar con Cigna Supplementary"
+  "Cuándo se pagan las comisiones de este mes"
+
+  ══════════════════════════════════════════════════════
+  COMANDOS GLOBALES (disponibles en todo momento)
+  ══════════════════════════════════════════════════════
+
+  instrucciones / help / ayuda — muestra esta pantalla
+  salir / exit / q             — cierra el sistema
+  volver / back                — regresa al menú anterior
+  nueva sesión                 — reinicia la identificación
 """)
     _sep()
 
@@ -191,9 +283,13 @@ Solo puedes escoger entre:
     -Verificar status del contrato en el sistema
     -Identificar motivo del retraso en la aprobación de un contrato
     -Instructivo Gestión de Contratos ACA
+    -Instructivo Gestión de Contratos Life
+    -Instructivo Gestión de Contratos Medicare
+    -Instructivo Gestión de Contratos Supplementary
     -Comisiones Pagadas
     -Comisiones Bloqueadas
     -Calendario Ciclo de Pago de Comisiones
+    -Porque no me han pagado mis comisiones
     -Consultar reglamentos e instructivos
 
 Ejemplos:
@@ -205,6 +301,12 @@ Ejemplos:
 
   Usuario: "Hay algún problema con la aprobación del contrato de mi agente"
   Respuesta: Motivo de retraso en la aprobación de un contrato
+
+  Usuario: "Por qué no me han pagado mis comisiones este mes"
+  Respuesta: Porque no me han pagado mis comisiones
+
+  Usuario: "Mis comisiones no llegaron, cuál es el motivo y cuándo me las pagan"
+  Respuesta: Porque no me han pagado mis comisiones
 
   Usuario: "Cuando se pagan las comisiones de este mes"
   Respuesta: Calendario de ciclos de pago de comisiones
@@ -496,9 +598,10 @@ def solicitar_filtros_dinamicos(
         for _, (valor, score, label, _) in entidades_previas.items():
             print(f"      • {label:<20} → {valor}  (confianza: {score:.2f})")
         print()
-        confirmar = _input(
-            "   ¿Confirmar? (S = confirmar / N = reformular / Enter = omitir filtros): "
-        ).strip().upper()
+        confirmar = _input_sn(
+            "   ¿Confirmar? (S = confirmar / N = reformular / Enter = omitir filtros): ",
+            con_enter=True,
+        )
         if confirmar == "S":
             return texto_previo, entidades_previas
         if confirmar == "":
@@ -531,9 +634,10 @@ def solicitar_filtros_dinamicos(
             print(f"      • {label:<20} → {valor}  (confianza: {score:.2f})")
 
         print()
-        confirmar = _input(
-            "   ¿Confirmar? (S = confirmar / N = reformular / Enter = omitir): "
-        ).strip().upper()
+        confirmar = _input_sn(
+            "   ¿Confirmar? (S = confirmar / N = reformular / Enter = omitir): ",
+            con_enter=True,
+        )
 
         if confirmar == "S":
             return texto, detectados
@@ -770,6 +874,13 @@ def ejecutar_consulta(
 
         tabla = _formatear_filas(rows)
         solicitud_display = texto_usuario if texto_usuario else pregunta["texto"]
+        instrucciones_custom = pregunta.get("instructions") or []
+        instrucciones_extra = (
+            "\nINSTRUCCIONES ADICIONALES DEL CASO DE USO:\n"
+            + "\n".join(f"- {i}" for i in instrucciones_custom)
+            + "\n"
+            if instrucciones_custom else ""
+        )
         prompt = (
             f"Eres un asistente especializado de Claro Insurance.\n"
             f"El usuario solicitó: \"{solicitud_display}\".\n\n"
@@ -788,6 +899,7 @@ def ejecutar_consulta(
             f"'Recuerde que si su consulta no fue efectiva, puede escribir \"escalar a un humano\"'.\n"
             f"- NO uses cierres formales como 'Atentamente' ni firmas de ningún tipo.\n"
             f"- Responde en español de forma clara y concisa.\n"
+            f"{instrucciones_extra}"
         )
 
         try:
@@ -878,6 +990,12 @@ def ejecutar_rag(pregunta_config: dict, user_query: str) -> None:
         print()
 
     contexto_completo = "\n\n---\n\n".join(docs)
+    instrucciones_custom = pregunta_config.get("instructions") or []
+    instrucciones_extra = (
+        "\n\nINSTRUCCIONES ADICIONALES DEL CASO DE USO:\n"
+        + "\n".join(f"- {i}" for i in instrucciones_custom)
+        if instrucciones_custom else ""
+    )
     prompt = (
         f"Eres un asistente especializado de Claro Insurance.\n"
         f"El usuario preguntó: \"{user_query}\"\n\n"
@@ -886,6 +1004,7 @@ def ejecutar_rag(pregunta_config: dict, user_query: str) -> None:
         f"Responde directamente la pregunta en español de forma clara y concisa. "
         f"Si la información no está en los documentos, indícalo. "
         f"NO uses cierres formales como 'Atentamente' ni firmas."
+        f"{instrucciones_extra}"
     )
     print("RESPUESTA:")
     _sep()
@@ -894,6 +1013,212 @@ def ejecutar_rag(pregunta_config: dict, user_query: str) -> None:
         print(response.text.strip())
     except Exception as exc:
         print(f"❌ Error al generar respuesta: {exc}")
+
+
+# ── Ejecución silenciosa para flujos múltiples ────────────────────────────────
+def _ejecutar_consulta_silenciosa(
+    pregunta: dict,
+    filtro_fijo: str | None,
+    entidades: dict,
+    texto_usuario: str,
+) -> dict:
+    """Ejecuta SQL y retorna dict con resultado. No imprime nada en pantalla."""
+    result: dict = {"tipo": "sql", "nombre": pregunta["texto"], "sql": None, "tabla": None, "error": None}
+    error_previo: str | None = None
+
+    for intento in range(1, _MAX_REINTENTOS_SQL + 1):
+        try:
+            sql_final = _construir_sql_con_llm(
+                pregunta, filtro_fijo, entidades, texto_usuario, error_previo
+            )
+            result["sql"] = sql_final
+        except Exception as exc:
+            error_previo = str(exc)
+            if intento == _MAX_REINTENTOS_SQL:
+                result["error"] = "No fue posible construir la consulta SQL."
+            continue
+
+        try:
+            rows = list(client.query(sql_final).result())
+        except Exception as exc:
+            error_previo = str(exc)
+            if intento == _MAX_REINTENTOS_SQL:
+                result["error"] = "La consulta SQL no pudo ejecutarse correctamente."
+            continue
+
+        result["tabla"] = _formatear_filas(rows) if rows else ""
+        return result
+
+    return result
+
+
+def _ejecutar_rag_silenciosa(
+    pregunta_config: dict,
+    user_query: str,
+) -> dict:
+    """Consulta ChromaDB y retorna dict con documentos. No imprime nada en pantalla."""
+    result: dict = {"tipo": "rag", "nombre": pregunta_config["texto"], "documentos": [], "error": None}
+
+    coleccion_nombre = pregunta_config.get("coleccion_chroma", "documentos_normativos")
+    carrier_detection = pregunta_config.get("carrier_detection", False)
+    carrier_umbral = pregunta_config.get("carrier_detection_umbral", 0.55)
+
+    try:
+        chroma_client = chromadb.PersistentClient(path=_CHROMA_PATH)
+        collection = chroma_client.get_collection(coleccion_nombre)
+    except Exception as exc:
+        result["error"] = str(exc)
+        return result
+
+    model = _get_embed_model()
+    query_embedding = model.encode(user_query).tolist()
+
+    where_filter = None
+    if carrier_detection:
+        all_meta = collection.get(include=["metadatas"])
+        carriers = list({m["carrier"] for m in all_meta["metadatas"] if "carrier" in m})
+        if carriers:
+            carrier_match, _ = _detectar_carrier_rag(user_query, carriers, carrier_umbral)
+            if carrier_match:
+                where_filter = {"carrier": carrier_match}
+
+    try:
+        results = collection.query(
+            query_embeddings=[query_embedding],
+            n_results=3,
+            where=where_filter,
+            include=["documents", "metadatas", "distances"],
+        )
+    except Exception as exc:
+        result["error"] = str(exc)
+        return result
+
+    result["documentos"] = results.get("documents", [[]])[0]
+    return result
+
+
+def _sintetizar_respuestas_multiples(user_query: str, resultados: dict, instructions: list | None = None) -> str:
+    """Recibe los resultados de todos los sub-casos y los unifica en una sola respuesta."""
+    bloques = []
+    for nombre, res in resultados.items():
+        if res.get("error"):
+            bloques.append(f"--- {nombre} ---\nNo disponible: {res['error']}")
+        elif res["tipo"] == "sql":
+            tabla = res.get("tabla")
+            if tabla:
+                bloques.append(f"--- {nombre} ---\n{tabla}")
+            else:
+                bloques.append(f"--- {nombre} ---\nNo se encontraron registros.")
+        elif res["tipo"] == "rag":
+            docs = res.get("documentos", [])
+            if docs:
+                bloques.append(f"--- {nombre} ---\n" + "\n\n".join(docs))
+            else:
+                bloques.append(f"--- {nombre} ---\nNo se encontraron documentos relacionados.")
+
+    contexto = "\n\n".join(bloques)
+    instrucciones_custom = instructions or []
+    instrucciones_extra = (
+        "\n" + "\n".join(f"- {i}" for i in instrucciones_custom) + "\n"
+        if instrucciones_custom else ""
+    )
+    prompt = (
+        f"Eres un asistente especializado de Claro Insurance.\n"
+        f"El usuario preguntó: \"{user_query}\"\n\n"
+        f"Para responder de forma completa se ejecutaron {len(resultados)} consultas. "
+        f"Aquí están los resultados:\n\n"
+        f"{contexto}\n\n"
+        f"INSTRUCCIONES:\n"
+        f"- Sintetiza TODA la información en UNA SOLA respuesta clara, directa y en español.\n"
+        f"- No repitas los encabezados de sección (---).\n"
+        f"- Presenta los datos de forma cohesiva como si fuera una sola explicación.\n"
+        f"- Si alguna consulta no arrojó resultados, menciónalo brevemente.\n"
+        f"- NO uses cierres formales como 'Atentamente' ni firmas de ningún tipo.\n"
+        f"- Al final agrega esta línea exacta: "
+        f"'Recuerde que si su consulta no fue efectiva, puede escribir \"escalar a un humano\"'.\n"
+        f"{instrucciones_extra}"
+    )
+    try:
+        response = llm_model.generate_content(prompt)
+        return response.text.strip()
+    except Exception as exc:
+        return f"❌ Error al generar la respuesta: {exc}"
+
+
+def ejecutar_multiple(
+    pregunta_multiple: dict,
+    catalogo_key: str,
+    sql_filtro: str | None,
+    filtro_fijo_key: str | None,
+    user_query: str,
+    entidades_previas: dict | None = None,
+) -> None:
+    """Ejecuta en paralelo todos los sub-casos declarados en 'invoca' y sintetiza la respuesta."""
+    invoca_ids = pregunta_multiple.get("invoca", [])
+    if not invoca_ids:
+        print("⚠  Este flujo no tiene sub-consultas configuradas.")
+        return
+
+    catalogo = USE_CASES["options"].get(catalogo_key, {})
+    preguntas_map = {p["id"]: p for p in catalogo.get("preguntas", [])}
+    sub_preguntas = [preguntas_map[i] for i in invoca_ids if i in preguntas_map]
+
+    if not sub_preguntas:
+        print("⚠  No se encontraron las sub-consultas referenciadas.")
+        return
+
+    # Usar entidades ya extraídas (del paso de confirmación) o extraer si no vienen
+    entidades: dict = entidades_previas or {}
+    if not entidades:
+        for sp in sub_preguntas:
+            if sp.get("tipo") == "sql" and sp.get("parametros"):
+                entidades = extraer_entidades(user_query, sp["parametros"], filtro_fijo_key)
+                break
+
+    print()
+    print(f"  Ejecutando {len(sub_preguntas)} consultas en paralelo...")
+
+    resultados: dict = {}
+    with ThreadPoolExecutor(max_workers=len(sub_preguntas)) as executor:
+        futures: dict = {}
+        for sp in sub_preguntas:
+            tipo_sp = sp.get("tipo")
+            if tipo_sp == "sql":
+                fut = executor.submit(
+                    _ejecutar_consulta_silenciosa, sp, sql_filtro, entidades, user_query
+                )
+            elif tipo_sp == "rag":
+                fut = executor.submit(_ejecutar_rag_silenciosa, sp, user_query)
+            else:
+                continue
+            futures[fut] = sp
+
+        for fut in as_completed(futures):
+            sp = futures[fut]
+            try:
+                resultados[sp["texto"]] = fut.result()
+            except Exception as exc:
+                resultados[sp["texto"]] = {
+                    "tipo": sp.get("tipo", "unknown"),
+                    "nombre": sp["texto"],
+                    "error": str(exc),
+                }
+
+    # Mostrar SQLs generados una vez que todos los threads terminaron
+    for nombre, res in resultados.items():
+        if res["tipo"] == "sql" and res.get("sql"):
+            print()
+            print(f"── Query [{nombre}] " + "─" * 30)
+            print(res["sql"])
+            print("─" * 55)
+
+    respuesta = _sintetizar_respuestas_multiples(
+        user_query, resultados, pregunta_multiple.get("instructions") or []
+    )
+    print()
+    print("RESULTADO:")
+    _sep()
+    print(respuesta)
 
 
 # ── Ciclo principal de consultas ───────────────────────────────────────────────
@@ -926,7 +1251,7 @@ def ciclo_consultas(
             print("  No fue posible identificar un flujo relacionado con su solicitud.")
             print()
             print("  Por favor reformule su consulta con más detalle.")
-            otra = _input("  ¿Desea intentar de nuevo? (S/N): ").strip().upper()
+            otra = _input_sn("  ¿Desea intentar de nuevo? (S/N): ")
             if otra != "S":
                 print()
                 print("Gracias por utilizar el Sistema de Consultas IA. ¡Hasta pronto!")
@@ -936,18 +1261,42 @@ def ciclo_consultas(
         nombre_caso = use_case_entry["nombre"]
         pregunta    = use_case_entry["pregunta"]
 
-        # Pre-detectar entidades del query original (solo para SQL)
+        # Pre-detectar entidades del query original (solo para SQL individual)
+        tipo_pregunta = pregunta.get("tipo")
         entidades_previas = {}
-        if pregunta.get("tipo") != "rag":
+        if tipo_pregunta == "sql":
             entidades_previas = extraer_entidades(
                 user_query, pregunta.get("parametros", []), filtro_fijo_key
             )
 
-        # Mostrar flujo identificado + entidades en un solo bloque de confirmación
+        # Mostrar flujo identificado + sub-casos o entidades según el tipo
         print()
         print(f'  Se ha identificado el flujo: "{nombre_caso}" - (Nivel de coincidencia: {score:.2f})')
 
-        if entidades_previas:
+        if tipo_pregunta == "multiple":
+            catalogo_actual = USE_CASES["options"].get(use_case_entry["catalogo"], {})
+            preguntas_map_actual = {p["id"]: p for p in catalogo_actual.get("preguntas", [])}
+            invoca_nombres = [
+                preguntas_map_actual[i]["texto"]
+                for i in pregunta.get("invoca", [])
+                if i in preguntas_map_actual
+            ]
+            print(f"  Se ejecutarán {len(invoca_nombres)} consultas en paralelo:")
+            for n in invoca_nombres:
+                print(f"      • {n}")
+            # Extraer entidades ahora para mostrarlas antes de confirmar
+            sub_pqs = [preguntas_map_actual[i] for i in pregunta.get("invoca", []) if i in preguntas_map_actual]
+            params_ref = next(
+                (sp["parametros"] for sp in sub_pqs if sp.get("tipo") == "sql" and sp.get("parametros")),
+                []
+            )
+            if params_ref:
+                entidades_previas = extraer_entidades(user_query, params_ref, filtro_fijo_key)
+            if entidades_previas:
+                print("  Entidades detectadas:")
+                for _, (val, sc_e, lbl, _) in entidades_previas.items():
+                    print(f"      • {lbl:<20} → {val}  (confianza: {sc_e:.2f})")
+        elif entidades_previas:
             print("  Con las siguientes entidades:")
             for _, (val, sc_e, lbl, _) in entidades_previas.items():
                 print(f"      • {lbl:<20} → {val}  (confianza: {sc_e:.2f})")
@@ -955,9 +1304,10 @@ def ciclo_consultas(
             print("  Sin ninguna entidad detectada.")
 
         print()
-        confirmar = _input(
-            "  ¿Desea Confirmar? (S = confirmar / N = reformular filtros / Enter = omitir filtros): "
-        ).strip().upper()
+        confirmar = _input_sn(
+            "  ¿Desea Confirmar? (S = confirmar / N = reformular filtros / Enter = omitir filtros): ",
+            con_enter=True,
+        )
 
         # N → volver al prompt de consulta (flujo incorrecto o quiere cambiar todo)
         if confirmar == "N":
@@ -966,7 +1316,14 @@ def ciclo_consultas(
             continue
 
         try:
-            if pregunta.get("tipo") == "rag":
+            if tipo_pregunta == "multiple":
+                print()
+                print("  Procesando su consulta, por favor espere...")
+                ejecutar_multiple(
+                    pregunta, use_case_entry["catalogo"], sql_filtro, filtro_fijo_key, user_query,
+                    entidades_previas,
+                )
+            elif tipo_pregunta == "rag":
                 ejecutar_rag(pregunta, user_query)
             else:
                 if confirmar == "S":
@@ -989,7 +1346,7 @@ def ciclo_consultas(
             continue
 
         print()
-        continuar = _input("¿Desea realizar otra consulta? (S/N): ").strip().upper()
+        continuar = _input_sn("¿Desea realizar otra consulta? (S/N): ")
         if continuar != "S":
             print()
             print("Gracias por utilizar el Sistema de Consultas IA. ¡Hasta pronto!")
