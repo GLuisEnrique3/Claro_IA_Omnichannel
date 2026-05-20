@@ -35,3 +35,6 @@ notes/
 Thumbs.db
 desktop.ini
 
+# Claude
+
+.claude/
