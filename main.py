@@ -3,9 +3,10 @@ import json
 import pickle
 import textwrap
 import datetime
+import os
 import re
 import torch
-import chromadb
+from config.pgvector_client import PgVectorClient
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
@@ -76,6 +77,7 @@ CATALOG_LABELS = {
 #  umbral: similitud coseno mínima para aceptar la entidad (0-1).
 PARAM_TO_FILTRO = {
     "c.NPN__c":           ("npn",                "NPN",                "AND c.NPN__c = '{v}'",                              0.90),
+    "c.Name":             ("name",              "Agente",             "AND c.Name = '{v}'",                                0.80),
     "a.Name_Agencies":    ("agency",             "Agencia",            "AND a.Name_Agencies = '{v}'",                       0.70),
     "o.Carrier":          ("carrier",            "Carrier",            "AND o.Carrier = '{v}'",                             0.85),
     "o.State":            ("state",              "Estado",             "AND o.State = '{v}'",                               0.80),
@@ -85,6 +87,8 @@ PARAM_TO_FILTRO = {
     "ae.Name":            ("account_executives", "Ejecutivo",          "AND ae.Name = '{v}'",                               0.75),
     # Parámetros de tipo fecha — filtro_key "__fecha__" activa el parser de lenguaje natural
     "p.Pay_on_Date__c":   ("__fecha__",          "Fecha de Pago",      "AND DATE_TRUNC(p.Pay_on_Date__c, MONTH) = DATE '{v}'", None),
+    # Parámetro de póliza — filtro_key "__policy_number__" activa extracción por regex
+    "p.Policy_Number__c": ("__policy_number__",  "Número de Póliza",   "AND p.Policy_Number__c = '{v}'",                       None),
 }
 _MAX_REINTENTOS_SQL = 2   # intentos máximos de construcción SQL con LLM
 
@@ -187,7 +191,7 @@ def _mostrar_instrucciones():
   ══════════════════════════════════════════════════════
 
   CONTRATOS
-    · Cantidad de Contratos Pendientes
+    · Cantidad de Contratos Activos y Pendientes
     · Verificar status del contrato en el sistema
     · Identificar motivo del retraso en la aprobación
     · Instructivo Gestión de Contratos ACA
@@ -279,6 +283,7 @@ Reglas:
 - No incluyas agrupaciones, filtros.
 
 Solo puedes escoger entre:
+    -Cantidad de Contratos Activos
     -Cantidad de Contratos Pendientes
     -Verificar status del contrato en el sistema
     -Identificar motivo del retraso en la aprobación de un contrato
@@ -545,9 +550,29 @@ def extraer_entidades(
             continue
         # ─────────────────────────────────────────────────────────────────────
 
-        # NPN es numérico — solo buscar si el texto contiene al menos 4 dígitos consecutivos
-        if filtro_key == "npn" and not re.search(r'\d{4,}', texto):
+        # ── Rama número de póliza: regex después de "poliza" / "póliza" ─────────
+        if filtro_key == "__policy_number__":
+            match = re.search(
+                r'p[oó]li[zs]a\s+(?:n[úu]m(?:ero)?\.?\s*|#\s*)?([A-Za-z0-9][A-Za-z0-9\-/]*)',
+                texto, re.IGNORECASE
+            )
+            if match:
+                valor = match.group(1)
+                sql_snippet = sql_tpl.replace("{v}", valor.replace("'", "''"))
+                detectados[param] = (valor, 1.0, label, sql_snippet)
             continue
+        # ─────────────────────────────────────────────────────────────────────
+
+        # NPN: regex explícita si el usuario menciona "NPN XXXXXXX"; si no, embeddings con fallback numérico
+        if filtro_key == "npn":
+            npn_match = re.search(r'n\.?p\.?n\.?\s*[:#]?\s*(\d{5,10})', texto, re.IGNORECASE)
+            if npn_match:
+                valor = npn_match.group(1)
+                sql_snippet = sql_tpl.replace("{v}", valor.replace("'", "''"))
+                detectados[param] = (valor, 1.0, label, sql_snippet)
+                continue
+            if not re.search(r'\d{4,}', texto):
+                continue
 
         candidatos = FILTROS_VALIDOS.get(filtro_key, [])
         if not candidatos:
@@ -777,6 +802,12 @@ def _construir_sql_con_llm(
         if error_previo else ""
     )
 
+    entity_resolution = pregunta.get("entity_resolution", "")
+    entity_resolution_bloque = (
+        f"\nRESTRICCIÓN ESPECÍFICA DE ESTE CASO (tiene prioridad sobre todo lo demás):\n{entity_resolution}\n"
+        if entity_resolution else ""
+    )
+
     prompt = (
         "Eres un experto en BigQuery SQL para el sistema Claro Insurance.\n\n"
         f"OBJETIVO DE LA CONSULTA: {pregunta['texto']}\n\n"
@@ -791,6 +822,7 @@ def _construir_sql_con_llm(
         f"{filtro_fijo_bloque}"
         f"{solicitud_bloque}"
         f"{error_bloque}"
+        f"{entity_resolution_bloque}"
         "\nREGLAS ESTRICTAS:\n"
         "- Los JOINs de la sintaxis base NO pueden removerse ni modificarse\n"
         "- Si agregas GROUP BY, el campo de agrupación DEBE estar también en el SELECT\n"
@@ -874,12 +906,10 @@ def ejecutar_consulta(
 
         tabla = _formatear_filas(rows)
         solicitud_display = texto_usuario if texto_usuario else pregunta["texto"]
-        instrucciones_custom = pregunta.get("instructions") or []
-        instrucciones_extra = (
-            "\nINSTRUCCIONES ADICIONALES DEL CASO DE USO:\n"
-            + "\n".join(f"- {i}" for i in instrucciones_custom)
-            + "\n"
-            if instrucciones_custom else ""
+        entity_resolution = pregunta.get("entity_resolution", "")
+        entity_resolution_bloque = (
+            f"\nFORMATO ESPECÍFICO DE RESPUESTA PARA ESTE CASO DE USO:\n{entity_resolution}\n"
+            if entity_resolution else ""
         )
         prompt = (
             f"Eres un asistente especializado de Claro Insurance.\n"
@@ -894,12 +924,12 @@ def ejecutar_consulta(
             f"- Si los datos son registros individuales (IDs, contratos, oportunidades): "
             f"NO los enumeres uno por uno. Solo indica cuántos se encontraron "
             f"y ofrece al usuario explorar detalles específicos si lo desea.\n"
-            f"- Termina invitando al usuario a continuar consultando o a profundizar en algún resultado.\n"
-            f"- Al final agrega esta línea exacta: "
-            f"'Recuerde que si su consulta no fue efectiva, puede escribir \"escalar a un humano\"'.\n"
+            f"- Al final agrega estas dos líneas exactas, en este orden:\n"
+            f"  'Le invitamos a realizar otra pregunta para seguir explorando.'\n"
+            f"  'Recuerde que si su consulta no fue efectiva, puede escribir \"escalar a un humano\"'.\n"
             f"- NO uses cierres formales como 'Atentamente' ni firmas de ningún tipo.\n"
             f"- Responde en español de forma clara y concisa.\n"
-            f"{instrucciones_extra}"
+            f"{entity_resolution_bloque}"
         )
 
         try:
@@ -912,7 +942,7 @@ def ejecutar_consulta(
 
 
 # ── RAG: consulta sobre documentos normativos ──────────────────────────────────
-_CHROMA_PATH = str(Path(__file__).parent / "chroma_db")
+_PGVECTOR_DSN = os.getenv("PGVECTOR_DSN")
 _BOX_W = 57
 
 
@@ -926,10 +956,10 @@ def ejecutar_rag(pregunta_config: dict, user_query: str) -> None:
     carrier_umbral = pregunta_config.get("carrier_detection_umbral", 0.55)
 
     try:
-        chroma_client = chromadb.PersistentClient(path=_CHROMA_PATH)
+        chroma_client = PgVectorClient(dsn=_PGVECTOR_DSN)
         collection = chroma_client.get_collection(coleccion_nombre)
     except Exception as exc:
-        print(f"❌ No se pudo conectar a ChromaDB: {exc}")
+        print(f"❌ No se pudo conectar a PgVector: {exc}")
         return
 
     model = _get_embed_model()
@@ -990,11 +1020,10 @@ def ejecutar_rag(pregunta_config: dict, user_query: str) -> None:
         print()
 
     contexto_completo = "\n\n---\n\n".join(docs)
-    instrucciones_custom = pregunta_config.get("instructions") or []
-    instrucciones_extra = (
-        "\n\nINSTRUCCIONES ADICIONALES DEL CASO DE USO:\n"
-        + "\n".join(f"- {i}" for i in instrucciones_custom)
-        if instrucciones_custom else ""
+    entity_resolution = pregunta_config.get("entity_resolution", "")
+    entity_resolution_bloque = (
+        f"\n\nFORMATO ESPECÍFICO DE RESPUESTA PARA ESTE CASO DE USO:\n{entity_resolution}"
+        if entity_resolution else ""
     )
     prompt = (
         f"Eres un asistente especializado de Claro Insurance.\n"
@@ -1003,8 +1032,11 @@ def ejecutar_rag(pregunta_config: dict, user_query: str) -> None:
         f"{contexto_completo}\n\n"
         f"Responde directamente la pregunta en español de forma clara y concisa. "
         f"Si la información no está en los documentos, indícalo. "
-        f"NO uses cierres formales como 'Atentamente' ni firmas."
-        f"{instrucciones_extra}"
+        f"NO uses cierres formales como 'Atentamente' ni firmas. "
+        f"Al final agrega estas dos líneas exactas, en este orden: "
+        f"'Le invitamos a realizar otra pregunta para seguir explorando.' "
+        f"'Recuerde que si su consulta no fue efectiva, puede escribir \"escalar a un humano\"'."
+        f"{entity_resolution_bloque}"
     )
     print("RESPUESTA:")
     _sep()
@@ -1064,7 +1096,7 @@ def _ejecutar_rag_silenciosa(
     carrier_umbral = pregunta_config.get("carrier_detection_umbral", 0.55)
 
     try:
-        chroma_client = chromadb.PersistentClient(path=_CHROMA_PATH)
+        chroma_client = PgVectorClient(dsn=_PGVECTOR_DSN)
         collection = chroma_client.get_collection(coleccion_nombre)
     except Exception as exc:
         result["error"] = str(exc)
@@ -1097,16 +1129,40 @@ def _ejecutar_rag_silenciosa(
     return result
 
 
-def _sintetizar_respuestas_multiples(user_query: str, resultados: dict, instructions: list | None = None) -> str:
+def _sintetizar_respuestas_multiples(
+    user_query: str,
+    resultados: dict,
+    entity_resolution: str = "",
+    priorizar_sql: bool = False,
+) -> str:
     """Recibe los resultados de todos los sub-casos y los unifica en una sola respuesta."""
+    # Si priorizar_sql=True y alguna consulta SQL devolvió datos, los bloques RAG se omiten
+    sql_tiene_datos = priorizar_sql and any(
+        res.get("tipo") == "sql" and res.get("tabla")
+        for res in resultados.values()
+        if not res.get("error")
+    )
+
     bloques = []
     for nombre, res in resultados.items():
         if res.get("error"):
             bloques.append(f"--- {nombre} ---\nNo disponible: {res['error']}")
-        elif res["tipo"] == "sql":
+            continue
+
+        if res["tipo"] == "rag" and sql_tiene_datos:
+            continue  # SQL ya tiene datos — el calendario no es necesario
+
+        descripciones = res.get("descripciones", {})
+        schema_str = (
+            "\nDescripción de columnas:\n"
+            + "\n".join(f"  - {col}: {desc}" for col, desc in descripciones.items())
+            if descripciones else ""
+        )
+
+        if res["tipo"] == "sql":
             tabla = res.get("tabla")
             if tabla:
-                bloques.append(f"--- {nombre} ---\n{tabla}")
+                bloques.append(f"--- {nombre} ---{schema_str}\n{tabla}")
             else:
                 bloques.append(f"--- {nombre} ---\nNo se encontraron registros.")
         elif res["tipo"] == "rag":
@@ -1117,26 +1173,27 @@ def _sintetizar_respuestas_multiples(user_query: str, resultados: dict, instruct
                 bloques.append(f"--- {nombre} ---\nNo se encontraron documentos relacionados.")
 
     contexto = "\n\n".join(bloques)
-    instrucciones_custom = instructions or []
-    instrucciones_extra = (
-        "\n" + "\n".join(f"- {i}" for i in instrucciones_custom) + "\n"
-        if instrucciones_custom else ""
+    entity_resolution_bloque = (
+        f"REGLA PRINCIPAL PARA ESTA CONSULTA (tiene prioridad sobre las instrucciones generales):\n{entity_resolution}\n\n"
+        if entity_resolution else ""
     )
     prompt = (
         f"Eres un asistente especializado de Claro Insurance.\n"
         f"El usuario preguntó: \"{user_query}\"\n\n"
+        f"{entity_resolution_bloque}"
         f"Para responder de forma completa se ejecutaron {len(resultados)} consultas. "
         f"Aquí están los resultados:\n\n"
         f"{contexto}\n\n"
-        f"INSTRUCCIONES:\n"
+        f"INSTRUCCIONES GENERALES:\n"
         f"- Sintetiza TODA la información en UNA SOLA respuesta clara, directa y en español.\n"
         f"- No repitas los encabezados de sección (---).\n"
+        f"- Usa la descripción de columnas para interpretar correctamente cada valor de la tabla.\n"
         f"- Presenta los datos de forma cohesiva como si fuera una sola explicación.\n"
         f"- Si alguna consulta no arrojó resultados, menciónalo brevemente.\n"
         f"- NO uses cierres formales como 'Atentamente' ni firmas de ningún tipo.\n"
-        f"- Al final agrega esta línea exacta: "
-        f"'Recuerde que si su consulta no fue efectiva, puede escribir \"escalar a un humano\"'.\n"
-        f"{instrucciones_extra}"
+        f"- Al final agrega estas dos líneas exactas, en este orden:\n"
+        f"  'Le invitamos a realizar otra pregunta para seguir explorando.'\n"
+        f"  'Recuerde que si su consulta no fue efectiva, puede escribir \"escalar a un humano\"'.\n"
     )
     try:
         response = llm_model.generate_content(prompt)
@@ -1196,12 +1253,15 @@ def ejecutar_multiple(
         for fut in as_completed(futures):
             sp = futures[fut]
             try:
-                resultados[sp["texto"]] = fut.result()
+                res = fut.result()
+                res["descripciones"] = sp.get("descripciones", {})
+                resultados[sp["texto"]] = res
             except Exception as exc:
                 resultados[sp["texto"]] = {
                     "tipo": sp.get("tipo", "unknown"),
                     "nombre": sp["texto"],
                     "error": str(exc),
+                    "descripciones": sp.get("descripciones", {}),
                 }
 
     # Mostrar SQLs generados una vez que todos los threads terminaron
@@ -1213,7 +1273,10 @@ def ejecutar_multiple(
             print("─" * 55)
 
     respuesta = _sintetizar_respuestas_multiples(
-        user_query, resultados, pregunta_multiple.get("instructions") or []
+        user_query,
+        resultados,
+        entity_resolution=pregunta_multiple.get("entity_resolution", ""),
+        priorizar_sql=pregunta_multiple.get("priorizar_sql", False),
     )
     print()
     print("RESULTADO:")

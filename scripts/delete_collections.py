@@ -1,20 +1,23 @@
 import os
-import chromadb
+import sys
+from dotenv import load_dotenv
 
 # =========================================================
 # CONFIG
 # =========================================================
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-CHROMA_PATH = os.path.join(BASE_DIR, "chroma_db")
+sys.path.insert(0, BASE_DIR)
+load_dotenv(os.path.join(BASE_DIR, ".env"))
+from config.pgvector_client import PgVectorClient
 
-COLLECTION_NAME = "instructivos_contratos_aca"
+COLLECTION_NAME = "calendario_comisiones"
 
 # =========================================================
 # CONNECT
 # =========================================================
 
-client = chromadb.PersistentClient(path=CHROMA_PATH)
+client = PgVectorClient(dsn=os.getenv("PGVECTOR_DSN"))
 
 # =========================================================
 # DELETE COLLECTION

@@ -1,5 +1,6 @@
 import os
-import chromadb
+import sys
+from dotenv import load_dotenv
 from sentence_transformers import SentenceTransformer
 from pypdf import PdfReader
 
@@ -9,7 +10,10 @@ from pypdf import PdfReader
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PDF_DIR = os.path.join(BASE_DIR, "pdf")
-CHROMA_PATH = os.path.join(BASE_DIR, "chroma_db")
+
+sys.path.insert(0, BASE_DIR)
+load_dotenv(os.path.join(BASE_DIR, ".env"))
+from config.pgvector_client import PgVectorClient
 
 EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 
@@ -423,7 +427,7 @@ def generate_chunks(text: str, strategy: str) -> list[str]:
 # CHROMA
 # =========================================================
 
-chroma_client = chromadb.PersistentClient(path=CHROMA_PATH)
+chroma_client = PgVectorClient(dsn=os.getenv("PGVECTOR_DSN"))
 
 model = SentenceTransformer(EMBEDDING_MODEL)
 
@@ -445,19 +449,8 @@ for doc_config in DOCUMENTS:
     # Collection
     # -----------------------------------------------------
 
-    try:
-        collection = chroma_client.get_collection(collection_name)
-
-        print(
-            f"Colección '{collection_name}' existente "
-            f"({collection.count()} chunks)."
-        )
-
-    except Exception:
-
-        collection = chroma_client.create_collection(collection_name)
-
-        print(f"Colección '{collection_name}' creada.")
+    collection = chroma_client.get_or_create_collection(collection_name)
+    print(f"Colección '{collection_name}' lista ({collection.count()} chunks).")
 
     # -----------------------------------------------------
     # Already indexed?
@@ -553,6 +546,10 @@ for doc_config in DOCUMENTS:
     # -----------------------------------------------------
     # Insert into Chroma
     # -----------------------------------------------------
+    existing_ids = collection.get(where={"filename": filename})["ids"]
+    if existing_ids:
+        collection.delete(ids=existing_ids)
+        print(f"🗑 Eliminados {len(existing_ids)} chunks viejos")
 
     collection.add(
         ids=ids,
