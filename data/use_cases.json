@@ -350,7 +350,6 @@
             "Cuál es el problema con mis comisiones, no me han llegado",
             "Necesito entender por qué no tengo el pago de mis comisiones"],
             "entity_resolution": "Tienes dos fuentes de información: (1) tabla SQL con comisiones bloqueadas y (2) calendario de pagos. Analiza primero la tabla SQL: si contiene registros de comisiones bloqueadas, responde indicando el monto retenido y la fecha de retención. Si la tabla SQL está vacía o indica 'No se encontraron registros', ignora los datos SQL y usa únicamente el calendario de pagos para explicar cuándo se espera el próximo depósito de comisiones."
-
         }
       ]
     },
