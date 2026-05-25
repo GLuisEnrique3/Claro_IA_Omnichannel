@@ -1,4 +1,5 @@
 import os
+import re
 import sys
 from dotenv import load_dotenv
 from sentence_transformers import SentenceTransformer
@@ -18,7 +19,6 @@ from config.chroma_client import ChromaClient
 EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 
 CHUNK_SIZE = 500
-CHUNK_OVERLAP = 100
 MAX_CHARS_PER_CHUNK = 600
 
 # =========================================================
@@ -265,7 +265,7 @@ DOCUMENTS = [
         "collection": "instructivos_contratos_medicare",
         "chunking": "sliding",
         "metadata": {
-            "carrier": "OSCAR",
+            "carrier": "WELLCARE",
             "line_of_business":"MEDICARE",
             "category": "instructivos_medicare"
         }
@@ -325,7 +325,7 @@ DOCUMENTS = [
         "collection": "instructivos_contratos_supplementary",
         "chunking": "sliding",
         "metadata": {
-            "carrier": "AMERITAS",
+            "carrier": "UNITED HEALTH ONE",
             "line_of_business":"SUPPLEMENTARY",
             "category": "instructivos_supplementary"
         }
@@ -338,6 +338,22 @@ DOCUMENTS = [
             "carrier": "CIGNA",
             "line_of_business":"SUPPLEMENTARY",
             "category": "instructivos_supplementary"
+        }
+    },
+    {
+        "filename": "Envíos de Plazos Estándar de Contratos.pdf",
+        "collection": "documentos_normativos",
+        "chunking": "sliding",
+        "metadata": {
+            "category": "flujos"
+        }
+    },
+    {
+        "filename": "Horario_Roles.pdf",
+        "collection": "documentos_normativos",
+        "chunking": "sliding",
+        "metadata": {
+            "category": "horarios"
         }
     }
     ]
@@ -363,24 +379,22 @@ def extract_pages(pdf_path: str) -> list[tuple[int, str]]:
 # CHUNKING METHODS
 # =========================================================
 
-def sliding_window(text: str) -> list[str]:
-    chunks = []
+def sentence_chunks(text: str) -> list[str]:
+    sentences = re.split(r'(?<=[.!?:])\s+', text.strip())
+    sentences = [s.strip() for s in sentences if s.strip()]
 
-    start = 0
+    chunks, current, current_len = [], [], 0
 
-    while start < len(text):
+    for sentence in sentences:
+        if current_len + len(sentence) > CHUNK_SIZE and current:
+            chunks.append(' '.join(current))
+            current = [current[-1]]          # overlap: última oración al chunk siguiente
+            current_len = len(current[0])
+        current.append(sentence)
+        current_len += len(sentence) + 1
 
-        end = start + CHUNK_SIZE
-
-        chunk = text[start:end].strip()
-
-        if chunk:
-            chunks.append(chunk)
-
-        if end >= len(text):
-            break
-
-        start = end - CHUNK_OVERLAP
+    if current:
+        chunks.append(' '.join(current))
 
     return chunks
 
@@ -415,7 +429,7 @@ def line_chunks(text: str) -> list[str]:
 def generate_chunks(text: str, strategy: str) -> list[str]:
 
     if strategy == "sliding":
-        return sliding_window(text)
+        return sentence_chunks(text)
 
     elif strategy == "lines":
         return line_chunks(text)

@@ -307,6 +307,15 @@ Solo puedes escoger entre:
     -Calendario Ciclo de Pago de Comisiones
     -Porque no me han pagado mis comisiones
     -Consultar reglamentos e instructivos
+    -Plazos estándar de envío de contratos
+    -Horarios y roles del equipo
+
+Ejemplos adicionales:
+  Usuario: "Cuáles son los plazos para enviar un contrato con Molina"
+  Respuesta: Plazos estándar de envío de contratos
+
+  Usuario: "Quién se encarga de aprobar los contratos y cuál es su horario"
+  Respuesta: Horarios y roles del equipo
 
 Ejemplos:
   Usuario: "Deseo consultar el status de mis contratos pendientes"
@@ -1008,7 +1017,8 @@ def ejecutar_rag(pregunta_config: dict, user_query: str, query_log=None) -> None
     print()
     query_embedding = model.encode(user_query).tolist()
 
-    where_filter = None
+    where_filter = pregunta_config.get("metadata_filter") or None
+
     if carrier_detection:
         all_meta = collection.get(include=["metadatas"])
         carriers = list({m["carrier"] for m in all_meta["metadatas"] if "carrier" in m})
@@ -1156,7 +1166,8 @@ def _ejecutar_rag_silenciosa(
     model = _get_embed_model()
     query_embedding = model.encode(user_query).tolist()
 
-    where_filter = None
+    where_filter = pregunta_config.get("metadata_filter") or None
+
     if carrier_detection:
         all_meta = collection.get(include=["metadatas"])
         carriers = list({m["carrier"] for m in all_meta["metadatas"] if "carrier" in m})

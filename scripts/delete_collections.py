@@ -11,7 +11,15 @@ sys.path.insert(0, BASE_DIR)
 load_dotenv(os.path.join(BASE_DIR, ".env"))
 from config.chroma_client import ChromaClient
 
-COLLECTION_NAME = "calendario_comisiones"
+#COLLECTION_NAME = "instructivos_contratos_supplementary"
+
+COLLECTIONS_TO_DELETE = [
+    "instructivos_contratos_aca",
+    "instructivos_contratos_medicare",
+    "instructivos_contratos_life",
+    "instructivos_contratos_supplementary",
+    "documentos_normativos",
+]
 
 # =========================================================
 # CONNECT
@@ -23,8 +31,8 @@ client = ChromaClient(path=os.getenv("CHROMA_PATH", "./chroma_db"))
 # DELETE COLLECTION
 # =========================================================
 
+"""
 collections = [c.name for c in client.list_collections()]
-
 if COLLECTION_NAME in collections:
 
     client.delete_collection(COLLECTION_NAME)
@@ -34,3 +42,14 @@ if COLLECTION_NAME in collections:
 else:
 
     print(f"⚠️ La colección no existe: {COLLECTION_NAME}")
+"""
+
+existing = [c.name for c in client.list_collections()]
+
+for name in COLLECTIONS_TO_DELETE:
+    if name in existing:
+        client.delete_collection(name)
+        print(f"✅ Eliminada: {name}")
+    else:
+        print(f"⚠️ No existe: {name}")
+

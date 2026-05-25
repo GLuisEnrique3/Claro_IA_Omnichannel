@@ -355,22 +355,44 @@
       ]
     },
     "C": {
-      "nombre": "Certifiaciones (Test)",
+      "nombre": "Documentos Normativos ",
       "preguntas": [
         {
           "id": "1",
-          "texto": "Consultar reglamentos e instructivos",
+          "texto": "Plazos Estándar de Envío de Contratos",
           "tipo": "rag",
           "semantic_examples": [
-            "Necesito ver los reglamentos de la empresa",
-            "Quiero consultar los instructivos normativos",
-            "Dónde puedo ver las políticas y procedimientos internos",
-            "Necesito información sobre las normas de Claro Insurance",
-            "Ver los documentos de certificación y cumplimiento",
-            "Quiero leer el reglamento sobre comisiones o contratos"
+            "Cuáles son los plazos para enviar contratos",
+            "Cuánto tiempo tengo para entregar la documentación del contrato",
+            "Fechas límite para el envío de contratos",
+            "Cuál es el plazo estándar para completar un contrato",
+            "En cuántos días debo enviar el contrato al carrier",
+            "Cuáles son los tiempos de entrega de contratos",
+            "Plazos de envío de contratos estándar",
+            "Tiempo máximo para gestionar un contrato"
           ],
           "entity_resolution": "",
           "coleccion_chroma": "documentos_normativos",
+          "metadata_filter": {"category": "flujos"},
+          "embedding_model": "all-MiniLM-L6-v2"
+        },
+        {
+          "id": "2",
+          "texto": "Horarios y Roles del Equipo",
+          "tipo": "rag",
+          "semantic_examples": [
+            "Cuál es el horario de atención del equipo",
+            "Quién es responsable de los contratos",
+            "Cuáles son los roles del equipo de Claro Insurance",
+            "A quién debo contactar para resolver un problema de contrato",
+            "Horario de trabajo del equipo de gestión",
+            "Qué rol se encarga de las comisiones",
+            "Cuáles son las responsabilidades de cada rol",
+            "Quién aprueba los contratos en el equipo"
+          ],
+          "entity_resolution": "",
+          "coleccion_chroma": "documentos_normativos",
+          "metadata_filter": {"category": "horarios"},
           "embedding_model": "all-MiniLM-L6-v2"
         }
       ]
