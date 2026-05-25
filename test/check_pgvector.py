@@ -5,10 +5,10 @@ from dotenv import load_dotenv
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, BASE_DIR)
 load_dotenv(os.path.join(BASE_DIR, ".env"))
-from config.pgvector_client import PgVectorClient
+from config.chroma_client import ChromaClient
 
-# --- PgVector state ---
-client = PgVectorClient(dsn=os.getenv("PGVECTOR_DSN"))
+# --- ChromaDB state ---
+client = ChromaClient(path=os.getenv("CHROMA_PATH", "./chroma_db"))
 collection = client.get_collection("calendario_comisiones")
 data = collection.get()
 
@@ -28,7 +28,7 @@ else:
     print("No hay segundo chunk disponible")
 
 # Información básica
-print(f"\nTotal chunks en PgVector: {len(data['ids'])}")
+print(f"\nTotal chunks en ChromaDB: {len(data['ids'])}")
 
 """
 # --- PDF extractable text ---

@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, BASE_DIR)
 load_dotenv(os.path.join(BASE_DIR, ".env"))
-from config.pgvector_client import PgVectorClient
+from config.chroma_client import ChromaClient
 
 # =========================================================
 # FUNCTION
@@ -21,7 +21,7 @@ def inspect_collection(
     preview_chars: int = 500
 ):
 
-    client = PgVectorClient(dsn=os.getenv("PGVECTOR_DSN"))
+    client = ChromaClient(path=os.getenv("CHROMA_PATH", "./chroma_db"))
 
     collections = [c.name for c in client.list_collections()]
 

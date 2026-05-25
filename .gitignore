@@ -38,3 +38,7 @@ desktop.ini
 # Claude
 
 .claude/
+
+# Api Experimental
+
+**/api.py

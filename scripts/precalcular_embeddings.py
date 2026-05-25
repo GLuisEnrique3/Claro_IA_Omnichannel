@@ -13,7 +13,7 @@ PDF_DIR = os.path.join(BASE_DIR, "pdf")
 
 sys.path.insert(0, BASE_DIR)
 load_dotenv(os.path.join(BASE_DIR, ".env"))
-from config.pgvector_client import PgVectorClient
+from config.chroma_client import ChromaClient
 
 EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 
@@ -427,7 +427,7 @@ def generate_chunks(text: str, strategy: str) -> list[str]:
 # CHROMA
 # =========================================================
 
-chroma_client = PgVectorClient(dsn=os.getenv("PGVECTOR_DSN"))
+chroma_client = ChromaClient(path=os.getenv("CHROMA_PATH", "./chroma_db"))
 
 model = SentenceTransformer(EMBEDDING_MODEL)
 

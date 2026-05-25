@@ -82,6 +82,54 @@ def cargar_filtros_desde_bq():
     """
     filtros["sub_stage_name"] = [row.Sub_stage for row in client.query(query_sub_stage).result()]
 
+    # License State
+    query_license_state = """
+        SELECT DISTINCT LicenseState__c
+        FROM `claroinsurance-dataplatform.claro_bi.vw_agent_licenses`
+        WHERE LicenseState__c IS NOT NULL
+    """
+    filtros["license_state"] = [row.LicenseState__c for row in client.query(query_license_state).result()]
+
+    # License Type
+    query_license_type = """
+        SELECT DISTINCT LicenseType__c
+        FROM `claroinsurance-dataplatform.claro_bi.vw_agent_licenses`
+        WHERE LicenseType__c IS NOT NULL
+    """
+    filtros["license_type"] = [row.LicenseType__c for row in client.query(query_license_type).result()]
+
+    # License Status (Active/Inactive)
+    query_license_status = """
+        SELECT DISTINCT Status__c
+        FROM `claroinsurance-dataplatform.claro_bi.vw_agent_licenses`
+        WHERE Status__c IS NOT NULL
+    """
+    filtros["license_status"] = [row.Status__c for row in client.query(query_license_status).result()]
+
+    # License Disposition
+    query_license_disposition = """
+        SELECT DISTINCT Disposition__c
+        FROM `claroinsurance-dataplatform.claro_bi.vw_agent_licenses`
+        WHERE Disposition__c IS NOT NULL
+    """
+    filtros["license_disposition"] = [row.Disposition__c for row in client.query(query_license_disposition).result()]
+
+    # License Sub-Disposition
+    query_license_sub_disposition = """
+        SELECT DISTINCT SubDisposition__c
+        FROM `claroinsurance-dataplatform.claro_bi.vw_agent_licenses`
+        WHERE SubDisposition__c IS NOT NULL
+    """
+    filtros["license_sub_disposition"] = [row.SubDisposition__c for row in client.query(query_license_sub_disposition).result()]
+
+    # License Source
+    query_license_source = """
+        SELECT DISTINCT Source__c
+        FROM `claroinsurance-dataplatform.claro_bi.vw_agent_licenses`
+        WHERE Source__c IS NOT NULL
+    """
+    filtros["license_source"] = [row.Source__c for row in client.query(query_license_source).result()]
+
     with open(FILTROS_VALIDOS_PATH, "wb") as f:
         pickle.dump(filtros, f)
 

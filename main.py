@@ -5,8 +5,9 @@ import textwrap
 import datetime
 import os
 import re
+import time
 import torch
-from config.pgvector_client import PgVectorClient
+from config.chroma_client import ChromaClient
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
@@ -21,6 +22,7 @@ _MESES_ES = list(_MESES_NUM.keys())
 sys.path.insert(0, str(Path(__file__).parent))
 
 from config import llm_model, llm_sql_model, client, FILTROS_VALIDOS, FILTROS_EMBEDDINGS
+from config.logger import get_session, nueva_sesion
 
 # ── Carga de casos de uso ──────────────────────────────────────────────────────
 USE_CASES_PATH = Path(__file__).parent / "data" / "use_cases.json"
@@ -89,6 +91,13 @@ PARAM_TO_FILTRO = {
     "p.Pay_on_Date__c":   ("__fecha__",          "Fecha de Pago",      "AND DATE_TRUNC(p.Pay_on_Date__c, MONTH) = DATE '{v}'", None),
     # Parámetro de póliza — filtro_key "__policy_number__" activa extracción por regex
     "p.Policy_Number__c": ("__policy_number__",  "Número de Póliza",   "AND p.Policy_Number__c = '{v}'",                       None),
+    # Parámetros de licencias
+    "l.LicenseState__c":  ("license_state",       "Estado de Licencia", "AND l.LicenseState__c = '{v}'",                        0.80),
+    "l.LicenseType__c":   ("license_type",        "Tipo de Licencia",   "AND l.LicenseType__c = '{v}'",                         0.80),
+    "l.Status__c":        ("license_status",      "Estado Licencia (Activa/Inactiva)", "AND l.Status__c = '{v}'",              0.85),
+    "l.Disposition__c":   ("license_disposition", "Disposición",        "AND l.Disposition__c = '{v}'",                         0.80),
+    "l.SubDisposition__c":("license_sub_disposition","Sub-Disposición", "AND l.SubDisposition__c = '{v}'",                     0.80),
+    "l.Source__c":        ("license_source",      "Fuente (Interna/NIPR)", "AND l.Source__c = '{v}'",                           0.85),
 }
 _MAX_REINTENTOS_SQL = 2   # intentos máximos de construcción SQL con LLM
 
@@ -198,6 +207,7 @@ def _mostrar_instrucciones():
     · Instructivo Gestión de Contratos Medicare
     · Instructivo Gestión de Contratos Life
     · Instructivo Gestión de Contratos Supplementary
+    · Licencias
 
   PAGOS Y COMISIONES
     · Comisiones Pagadas
@@ -291,6 +301,7 @@ Solo puedes escoger entre:
     -Instructivo Gestión de Contratos Life
     -Instructivo Gestión de Contratos Medicare
     -Instructivo Gestión de Contratos Supplementary
+    -Licencias
     -Comisiones Pagadas
     -Comisiones Bloqueadas
     -Calendario Ciclo de Pago de Comisiones
@@ -858,6 +869,7 @@ def ejecutar_consulta(
     filtro_fijo: str | None,
     entidades: dict,
     texto_usuario: str,
+    query_log=None,
 ) -> str:
     if pregunta.get("tipo") != "sql" or "sql" not in pregunta:
         return (
@@ -868,31 +880,46 @@ def ejecutar_consulta(
     error_previo: str | None = None
 
     for intento in range(1, _MAX_REINTENTOS_SQL + 1):
+        if query_log:
+            query_log.sql_intentos = intento
         print()
         if intento == 1:
             print("🤖 Consultando el sistema..")
         else:
             print(f"🔄 Reintentando construcción SQL (intento {intento}/{_MAX_REINTENTOS_SQL})...")
 
+        _t_sql = time.perf_counter()
         try:
             sql_final = _construir_sql_con_llm(
                 pregunta, filtro_fijo, entidades, texto_usuario, error_previo
             )
         except Exception as exc:
             error_previo = str(exc)
+            if query_log:
+                query_log.sql_exitoso = False
+                query_log.sql_error = str(exc)
+                query_log.latencia_sql_ms = int((time.perf_counter() - _t_sql) * 1000)
             if intento == _MAX_REINTENTOS_SQL:
                 return "❌ No disponible. No fue posible construir la consulta con el modelo de IA."
             continue
+
+        if query_log:
+            query_log.latencia_sql_ms = int((time.perf_counter() - _t_sql) * 1000)
 
         print()
         print("── Query enviada a BigQuery " + "─" * 27)
         print(sql_final)
         print("─" * 55)
 
+        _t_bq = time.perf_counter()
         try:
             rows = list(client.query(sql_final).result())
         except Exception as exc:
             error_previo = str(exc)
+            if query_log:
+                query_log.bq_exitoso = False
+                query_log.bq_error = str(exc)
+                query_log.latencia_bq_ms = int((time.perf_counter() - _t_bq) * 1000)
             print(f"   ⚠  Error en BigQuery (intento {intento}/{_MAX_REINTENTOS_SQL}).")
             if intento == _MAX_REINTENTOS_SQL:
                 return (
@@ -900,6 +927,12 @@ def ejecutar_consulta(
                     "Por favor intente reformular su solicitud."
                 )
             continue
+
+        if query_log:
+            query_log.latencia_bq_ms = int((time.perf_counter() - _t_bq) * 1000)
+            query_log.bq_exitoso = True
+            query_log.bq_filas = len(rows)
+            query_log.sql_exitoso = True
 
         if not rows:
             return "No se encontraron resultados para su consulta."
@@ -932,8 +965,11 @@ def ejecutar_consulta(
             f"{entity_resolution_bloque}"
         )
 
+        _t_resp = time.perf_counter()
         try:
             response = llm_model.generate_content(prompt)
+            if query_log:
+                query_log.latencia_respuesta_ms = int((time.perf_counter() - _t_resp) * 1000)
             return response.text
         except Exception as exc:
             return f"❌ Error al generar la respuesta con el modelo:\n{exc}"
@@ -942,7 +978,7 @@ def ejecutar_consulta(
 
 
 # ── RAG: consulta sobre documentos normativos ──────────────────────────────────
-_PGVECTOR_DSN = os.getenv("PGVECTOR_DSN")
+_CHROMA_PATH = os.getenv("CHROMA_PATH", "./chroma_db")
 _BOX_W = 57
 
 
@@ -950,16 +986,20 @@ def _box_line(text: str) -> str:
     return f"│ {text:<{_BOX_W - 2}} │"
 
 
-def ejecutar_rag(pregunta_config: dict, user_query: str) -> None:
+def ejecutar_rag(pregunta_config: dict, user_query: str, query_log=None) -> None:
     coleccion_nombre = pregunta_config.get("coleccion_chroma", "documentos_normativos")
     carrier_detection = pregunta_config.get("carrier_detection", False)
     carrier_umbral = pregunta_config.get("carrier_detection_umbral", 0.55)
 
+    if query_log:
+        query_log.rag_coleccion = coleccion_nombre
+
+    _t_rag = time.perf_counter()
     try:
-        chroma_client = PgVectorClient(dsn=_PGVECTOR_DSN)
+        chroma_client = ChromaClient(path=_CHROMA_PATH)
         collection = chroma_client.get_collection(coleccion_nombre)
     except Exception as exc:
-        print(f"❌ No se pudo conectar a PgVector: {exc}")
+        print(f"❌ No se pudo conectar a ChromaDB: {exc}")
         return
 
     model = _get_embed_model()
@@ -976,6 +1016,8 @@ def ejecutar_rag(pregunta_config: dict, user_query: str) -> None:
             carrier_match, carrier_score = _detectar_carrier_rag(user_query, carriers, carrier_umbral)
             if carrier_match:
                 where_filter = {"carrier": carrier_match}
+                if query_log:
+                    query_log.rag_carrier = carrier_match
                 print(f"   Carrier detectado: {carrier_match} (confianza: {carrier_score:.2f})")
 
     try:
@@ -989,9 +1031,15 @@ def ejecutar_rag(pregunta_config: dict, user_query: str) -> None:
         print(f"❌ Error al consultar ChromaDB: {exc}")
         return
 
+    if query_log:
+        query_log.latencia_rag_ms = int((time.perf_counter() - _t_rag) * 1000)
+
     docs = results.get("documents", [[]])[0]
     metas = results.get("metadatas", [[]])[0]
     dists = results.get("distances", [[]])[0]
+
+    if query_log:
+        query_log.rag_documentos = len(docs)
 
     print()
     if not docs:
@@ -1040,8 +1088,11 @@ def ejecutar_rag(pregunta_config: dict, user_query: str) -> None:
     )
     print("RESPUESTA:")
     _sep()
+    _t_resp = time.perf_counter()
     try:
         response = llm_model.generate_content(prompt)
+        if query_log:
+            query_log.latencia_respuesta_ms = int((time.perf_counter() - _t_resp) * 1000)
         print(response.text.strip())
     except Exception as exc:
         print(f"❌ Error al generar respuesta: {exc}")
@@ -1096,7 +1147,7 @@ def _ejecutar_rag_silenciosa(
     carrier_umbral = pregunta_config.get("carrier_detection_umbral", 0.55)
 
     try:
-        chroma_client = PgVectorClient(dsn=_PGVECTOR_DSN)
+        chroma_client = ChromaClient(path=_CHROMA_PATH)
         collection = chroma_client.get_collection(coleccion_nombre)
     except Exception as exc:
         result["error"] = str(exc)
@@ -1133,24 +1184,13 @@ def _sintetizar_respuestas_multiples(
     user_query: str,
     resultados: dict,
     entity_resolution: str = "",
-    priorizar_sql: bool = False,
 ) -> str:
     """Recibe los resultados de todos los sub-casos y los unifica en una sola respuesta."""
-    # Si priorizar_sql=True y alguna consulta SQL devolvió datos, los bloques RAG se omiten
-    sql_tiene_datos = priorizar_sql and any(
-        res.get("tipo") == "sql" and res.get("tabla")
-        for res in resultados.values()
-        if not res.get("error")
-    )
-
     bloques = []
     for nombre, res in resultados.items():
         if res.get("error"):
             bloques.append(f"--- {nombre} ---\nNo disponible: {res['error']}")
             continue
-
-        if res["tipo"] == "rag" and sql_tiene_datos:
-            continue  # SQL ya tiene datos — el calendario no es necesario
 
         descripciones = res.get("descripciones", {})
         schema_str = (
@@ -1276,7 +1316,6 @@ def ejecutar_multiple(
         user_query,
         resultados,
         entity_resolution=pregunta_multiple.get("entity_resolution", ""),
-        priorizar_sql=pregunta_multiple.get("priorizar_sql", False),
     )
     print()
     print("RESULTADO:")
@@ -1302,12 +1341,24 @@ def ciclo_consultas(
             print("  Por favor ingrese una consulta.")
             continue
 
+        q = get_session().nueva_consulta()
+        q.query_original = user_query
+
         print()
         print("  Analizando su consulta...")
 
+        _t = time.perf_counter()
         normalized = transformar_consulta_con_llm(user_query)
+        q.latencia_normalizacion_ms = int((time.perf_counter() - _t) * 1000)
+        q.query_normalizado = normalized
+
         print(f"  #--DEBUG Pregunta Formateada: {normalized}")
+
+        _t = time.perf_counter()
         use_case_entry, score = detectar_caso_de_uso(normalized, catalogos)
+        q.latencia_deteccion_ms = int((time.perf_counter() - _t) * 1000)
+        q.caso_score = score
+        q.caso_exitoso = use_case_entry is not None
 
         if use_case_entry is None:
             print()
@@ -1318,19 +1369,29 @@ def ciclo_consultas(
             if otra != "S":
                 print()
                 print("Gracias por utilizar el Sistema de Consultas IA. ¡Hasta pronto!")
+                get_session().cerrar_consulta()
                 break
+            get_session().cerrar_consulta()
             continue
 
         nombre_caso = use_case_entry["nombre"]
         pregunta    = use_case_entry["pregunta"]
+        q.caso_nombre   = nombre_caso
+        q.caso_catalogo = use_case_entry.get("catalogo")
 
         # Pre-detectar entidades del query original (solo para SQL individual)
         tipo_pregunta = pregunta.get("tipo")
         entidades_previas = {}
         if tipo_pregunta == "sql":
+            _t = time.perf_counter()
             entidades_previas = extraer_entidades(
                 user_query, pregunta.get("parametros", []), filtro_fijo_key
             )
+            q.latencia_entidades_ms = int((time.perf_counter() - _t) * 1000)
+            q.entidades = [
+                {"param": p, "label": v[2], "valor": v[0], "score": v[1]}
+                for p, v in entidades_previas.items()
+            ]
 
         # Mostrar flujo identificado + sub-casos o entidades según el tipo
         print()
@@ -1359,6 +1420,10 @@ def ciclo_consultas(
                 print("  Entidades detectadas:")
                 for _, (val, sc_e, lbl, _) in entidades_previas.items():
                     print(f"      • {lbl:<20} → {val}  (confianza: {sc_e:.2f})")
+                q.entidades = [
+                    {"param": p, "label": v[2], "valor": v[0], "score": v[1]}
+                    for p, v in entidades_previas.items()
+                ]
         elif entidades_previas:
             print("  Con las siguientes entidades:")
             for _, (val, sc_e, lbl, _) in entidades_previas.items():
@@ -1376,7 +1441,10 @@ def ciclo_consultas(
         if confirmar == "N":
             print()
             print("  Por favor reformule su consulta.")
+            get_session().cerrar_consulta()
             continue
+
+        q.tipo_ejecucion = tipo_pregunta
 
         try:
             if tipo_pregunta == "multiple":
@@ -1387,7 +1455,7 @@ def ciclo_consultas(
                     entidades_previas,
                 )
             elif tipo_pregunta == "rag":
-                ejecutar_rag(pregunta, user_query)
+                ejecutar_rag(pregunta, user_query, query_log=q)
             else:
                 if confirmar == "S":
                     texto_usuario, entidades = user_query, entidades_previas
@@ -1397,7 +1465,7 @@ def ciclo_consultas(
 
                 print()
                 print("  Procesando su consulta, por favor espere...")
-                respuesta = ejecutar_consulta(pregunta, sql_filtro, entidades, texto_usuario)
+                respuesta = ejecutar_consulta(pregunta, sql_filtro, entidades, texto_usuario, query_log=q)
                 print()
                 print("RESULTADO:")
                 _sep()
@@ -1406,7 +1474,10 @@ def ciclo_consultas(
             print()
             print("  Volviendo al menú principal...")
             print()
+            get_session().cerrar_consulta()
             continue
+
+        get_session().cerrar_consulta()
 
         print()
         continuar = _input_sn("¿Desea realizar otra consulta? (S/N): ")
@@ -1420,10 +1491,13 @@ def ciclo_consultas(
 # ── Punto de entrada ───────────────────────────────────────────────────────────
 def main():
     _header()
+    nueva_sesion()
     try:
         while True:
             try:
                 tipo_key, nombre_tipo, valor_id, score = identificar_usuario()
+
+                get_session().registrar_identificacion(nombre_tipo, valor_id, score)
 
                 tipo = TIPOS_USUARIO[tipo_key]
                 sql_filtro = None

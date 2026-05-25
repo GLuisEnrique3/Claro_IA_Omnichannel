@@ -226,11 +226,24 @@
           "texto": "Licencias",
           "tipo": "sql",
           "semantic_examples": [
+            "Cual es el estado de mi licencia",
+            "Deseo verificar el estado de mi licencia",
+            "Deseo consultar sobre la validación de mi licencia"
           ],
-          "sql":"",
-          "parametros": [],
-          "entity_resolution" : "",
+          "sql":"SELECT l.Name as Id,l.Disposition__c,l.SubDisposition__c,l.LicenseState__c ,l.LicenseType__c,l.Status__c,l.Source__c,c.Name,c.NPN__c,a.Name_Agencies, COUNT(*) FROM `claroinsurance-dataplatform.claro_bi.vw_agent_licenses` l left join `claroinsurance-dataplatform.claro_bi.dim_contact` c on l.AgentName__c = c.Id left join `claroinsurance-dataplatform.claro_bi.dim_account_2` as a on a.Id = c.AccountId  {dynamic_filters}  ",
+          "parametros": ["c.NPN__c","c.Name","a.Name_Agencies","l.LicenseState__c","l.LicenseType__c","l.Status__c","l.Disposition__c","l.SubDisposition__c","l.Source__c"],
+          "entity_resolution" : "Siempre muestra los resultados en formato de tabla o lista detallada con una fila por licencia. Incluye obligatoriamente los campos: Id (l.Name), Agente (c.Name), NPN (c.NPN__c), Estado de Licencia (LicenseState__c), Tipo (LicenseType__c), Estado Activa/Inactiva (Status__c), Disposición (Disposition__c) y Fuente (Source__c). Nunca omitas el Id de licencia ni colapses múltiples licencias en un resumen de conteo.",
           "descripciones": {
+           "l.Name":"Identificador de la licencia",
+           "l.Disposition__c": "Estado de la licencia",
+           "l.SubDisposition__c" : "Sub Disposición de la licencia",
+           "LicenseState__c": "Región Geografica/Estado donde aplica la licencia",
+           "LicenseType__c": "Tipo de Licencia",
+           "Status__c": "Activa o Inactiva",
+           "l.Source__c" : "Fuente (Interna o NIPR)",
+           "c.Name":"Nombre del Agente",
+           "c.NPN__c":"Número de productor nacional del agente (NPN).",
+           "a.Name_Agencies":"Nombre de la agencia a la que pertenece el agente o licencia"
           }
         }  
       ]
@@ -271,6 +284,13 @@
           "texto": "Comisiones Bloqueadas",
           "tipo": "sql",
           "semantic_examples": [
+            "Comisiones bloqueadas",
+            "Ver comisiones bloqueadas",
+            "Cuáles son las comisiones bloqueadas",
+            "Mostrar comisiones bloqueadas",
+            "Comisiones retenidas",
+            "Comisiones bloqueadas de la agencia",
+            "Consultar comisiones bloqueadas",
             "Cuánto tengo en comisiones bloqueadas o pendientes de pago",
             "Ver comisiones que no han sido pagadas todavía",
             "Qué comisiones están retenidas o no liberadas",
@@ -305,7 +325,11 @@
             "En qué fecha se hace el ciclo de pago",
             "Quiero saber el cronograma de pagos de comisiones",
             "Cuáles son las fechas de corte para el pago de comisiones",
-            "Por qué no me han pagado mis comisiones todavía, cuándo es el próximo pago"
+            "Por qué no me han pagado mis comisiones todavía, cuándo es el próximo pago",
+            "Calendario de ciclos de pago de comisiones",
+            "Calendario de pago de comisiones",
+            "Cuál es el calendario de pago para ACA Molina",
+            "Calendario de pagos por carrier"
           ],
           "coleccion_chroma": "calendario_comisiones",
           "embedding_model": "all-MiniLM-L6-v2",
@@ -325,14 +349,13 @@
             "Quiero saber por qué mis comisiones están retenidas y cuándo me van a pagar",
             "Cuál es el problema con mis comisiones, no me han llegado",
             "Necesito entender por qué no tengo el pago de mis comisiones"],
-            "priorizar_sql": true,
-            "entity_resolution": "Si hay comisiones bloqueadas, responde de forma breve y directa indicando el monto retenido y la fecha. Si no hay registros bloqueados, explica brevemente usando el calendario cuándo se espera el pago."
+            "entity_resolution": "Tienes dos fuentes de información: (1) tabla SQL con comisiones bloqueadas y (2) calendario de pagos. Analiza primero la tabla SQL: si contiene registros de comisiones bloqueadas, responde indicando el monto retenido y la fecha de retención. Si la tabla SQL está vacía o indica 'No se encontraron registros', ignora los datos SQL y usa únicamente el calendario de pagos para explicar cuándo se espera el próximo depósito de comisiones."
 
         }
       ]
     },
     "C": {
-      "nombre": "Licencias",
+      "nombre": "Certifiaciones (Test)",
       "preguntas": [
         {
           "id": "1",
