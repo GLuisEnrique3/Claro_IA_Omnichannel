@@ -289,9 +289,10 @@
             "Estatus de licencia",
             "Cual es el estado de mi licencia",
             "Deseo verificar el estado de mi licencia",
-            "Deseo consultar sobre la validación de mi licencia"
+            "Deseo consultar sobre la validación de mi licencia",
+            "Licencias Activas"
           ],
-          "sql":"SELECT l.Name as Id,l.Disposition__c,l.SubDisposition__c,l.LicenseState__c ,l.LicenseType__c,l.Status__c,l.Source__c,c.Name,c.NPN__c,a.Name_Agencies FROM `claroinsurance-dataplatform.claro_bi.vw_agent_licenses` l left join `claroinsurance-dataplatform.claro_bi.dim_contact` c on l.AgentName__c = c.Id left join `claroinsurance-dataplatform.claro_bi.dim_account_2` as a on a.Id = c.AccountId  {dynamic_filters} ",
+          "sql":"SELECT l.Name as Id,l.Disposition__c,l.SubDisposition__c,l.LicenseState__c ,l.LicenseType__c,l.Status__c,l.Source__c,c.Name,c.NPN__c,a.Name_Agencies FROM `claroinsurance-dataplatform.claro_bi.vw_agent_licenses` l left join `claroinsurance-dataplatform.claro_bi.dim_contact` c on l.AgentName__c = c.Id left join `claroinsurance-dataplatform.claro_bi.dim_account_2` as a on a.Id = c.AccountId WHERE 1=1 {dynamic_filters}",
           "parametros": ["c.NPN__c","c.Name","a.Name_Agencies","l.LicenseState__c","l.LicenseType__c","l.Status__c","l.Disposition__c","l.SubDisposition__c","l.Source__c"],
           "entity_resolution" : "Siempre muestra los resultados en formato de tabla o lista detallada con una fila por licencia. Incluye obligatoriamente los campos: Id (l.Name), Agente (c.Name), NPN (c.NPN__c), Estado de Licencia (LicenseState__c), Tipo (LicenseType__c), Estado Activa/Inactiva (Status__c), Disposición (Disposition__c) y Fuente (Source__c). Nunca omitas el Id de licencia ni colapses múltiples licencias en un resumen de conteo.",
           "descripciones": {
@@ -437,7 +438,7 @@
             "Ver el listado completo de pagos de comisiones",
             "Quiero ver los pagos de comisiones uno por uno"
           ],
-          "sql": "SELECT p.Policy_Number__c,b.Member_First_Name__c,b.Member_Last_Name__c,o.Carrier,o.State,p.Payment_Type__c,DATE(p.Commission_Month__c) as Commision_Month__c,DATE(p.Pay_on_Date__c) as Pay_on_Date__c,c.Name as Payment_Contact,p.Payment_Status__c,a.Name_Agencies as Master_Agency,a.Subagencia_Name as Sub_Agency,p.Members_Paid__c,p.Net_Payment__c FROM `claroinsurance-dataplatform.salesforce_claro.payment` p LEFT JOIN `claroinsurance-dataplatform.claro_bi.dim_cslb` o ON o.Id = p.Carrier_State_line_of_Business__c LEFT JOIN `claroinsurance-dataplatform.claro_bi.dim_contact` c ON c.Id = p.Contact_Payee__c LEFT JOIN `claroinsurance-dataplatform.claro_bi.dim_account_2` a ON a.Id = c.AccountId LEFT JOIN `claroinsurance-dataplatform.claro_bi.BOB_TD` b ON p.Policy_Number__c = b.Policy_Number__c WHERE p.Internal_Company_lookup__c = 'a081G00000C9sU8QAJ'{dynamic_filters} ",
+          "sql": "SELECT p.Policy_Number__c,b.Member_First_Name__c,b.Member_Last_Name__c,o.Carrier,o.State,p.Payment_Type__c,DATE_TRUNC(DATE(p.Commission_Month__c),MONTH) as Commision_Month__c,DATE_TRUNC(DATE(p.Pay_on_Date__c),MONTH) as Pay_on_Date__c,c.Name as Payment_Contact,p.Payment_Status__c,a.Name_Agencies as Master_Agency,a.Subagencia_Name as Sub_Agency,SUM(SAFE_CAST(p.Members_Paid__c AS INT64)) as Members_Paid, SUM(SAFE_CAST(p.Net_Payment__c AS FLOAT64)) as Net_Payment__c FROM `claroinsurance-dataplatform.salesforce_claro.payment` p LEFT JOIN `claroinsurance-dataplatform.claro_bi.dim_cslb` o ON o.Id = p.Carrier_State_line_of_Business__c LEFT JOIN `claroinsurance-dataplatform.claro_bi.dim_contact` c ON c.Id = p.Contact_Payee__c LEFT JOIN `claroinsurance-dataplatform.claro_bi.dim_account_2` a ON a.Id = c.AccountId LEFT JOIN `claroinsurance-dataplatform.claro_bi.BOB_TD` b ON p.Policy_Number__c = b.Policy_Number__c WHERE p.Internal_Company_lookup__c = 'a081G00000C9sU8QAJ' {dynamic_filters}  GROUP BY p.Policy_Number__c,b.Member_First_Name__c,b.Member_Last_Name__c,o.Carrier,o.State,p.Payment_Type__c,DATE_TRUNC(DATE(p.Commission_Month__c),MONTH) ,DATE_TRUNC(DATE(p.Pay_on_Date__c),MONTH) ,c.Name,p.Payment_Status__c,a.Name_Agencies,a.Subagencia_Name ",
           "parametros": ["c.NPN__c","c.Name","a.Name_Agencies","o.Carrier","o.State","o.Line_Of_Business","p.Pay_on_Date__c","p.Policy_Number__c","p.Payment_Type__c","p.Payment_Status__c","p.Commission_Month__c"],
           "entity_resolution" : "Detalle Comisiones retorna registros individuales de pagos. Cada fila representa un pago específico con: número de póliza, nombre del miembro, carrier, estado, tipo de pago, mes de comisión (Commission_Month), fecha de pago al agente (Pay_on_Date), contacto de pago, status del pago, agencia maestra, sub-agencia, miembros pagados y monto neto. Presenta siempre los resultados en formato de tabla. Commission_Month es la fecha en que el Carrier pagó a la Agencia; Pay_on_Date es la fecha en que la Agencia liberó el pago al agente.",
           "descripciones": {
@@ -447,7 +448,7 @@
             "o.Carrier":              "Compañía de seguros o aseguradora (ej. Humana, Ambetter, Aetna).",
             "o.State":                "Estado de los Estados Unidos donde aplica la póliza.",
             "o.Line_Of_Business":     "Línea de negocio o tipo de producto de seguros.",
-            "p.Pay_on_Date__c":       "Fecha de pago de la comisión de la Agencia al cliente en formato diario. Acepta expresiones como 'el mes pasado', 'mayo 2024', 'hace 3 meses', 'este mes'.Siempre debes trabajarlo como DATE_TRUNC(p.Pay_on_Date__c,MONTH)",
+            "p.Pay_on_Date__c":       "Fecha de pago de la comisión de la Agencia al cliente en formato diario. Acepta expresiones como 'el mes pasado', 'mayo 2024', 'hace 3 meses', 'este mes'.Siempre debes trabajarlo como DATE_TRUNC(DATE(p.Pay_on_Date__c),MONTH)",
             "p.Policy_Number__c":     "Número de Póliza",
             "p.Commission_Month__c" : "Fecha de pago de la comisión del Carrier a la Agencia en formato mensual para luego ser liberada al Agente, a través de Pay on Date. Acepta expresiones como 'el mes pasado', 'mayo 2024', 'hace 3 meses', 'este mes'.Siempre debes trabajarlo como DATE_TRUNC(p.Commission_Month__c,MONTH)",
             "p.Net_Payment__c":       "Es el monto bloqueado o pendiente que corresponde al agente",
@@ -482,9 +483,9 @@
           "id": "5",
           "texto": "Porque no me han pagado mis comisiones",
           "tipo": "multiple",
-          "invoca": ["2", "3"],
+          "invoca": ["3"],
           "semantic_examples": [
-            "Razón de falta de pago de comisiones",
+            "Razón de falta de pago",
             "Motivo de comisiones no pagadas",
             "Por qué no llegaron mis comisiones",
             "Causa de pago pendiente de comisiones",
@@ -493,8 +494,15 @@
             "Mis comisiones no llegaron, qué pasó",
             "No me han depositado mis comisiones, por qué",
             "Quiero saber por qué mis comisiones están retenidas",
-            "Necesito entender por qué no tengo el pago de mis comisiones"],
-            "entity_resolution": "Tienes dos fuentes de información: (1) tabla SQL con comisiones bloqueadas y (2) calendario de pagos. Analiza primero la tabla SQL: si contiene registros de comisiones bloqueadas, responde indicando el monto retenido y la fecha de retención. Si la tabla SQL está vacía o indica 'No se encontraron registros', ignora los datos SQL y usa únicamente el calendario de pagos para explicar cuándo se espera el próximo depósito de comisiones."
+            "Necesito entender por qué no tengo el pago de mis comisiones",
+            "Investigar por qué no llegó mi pago de comisiones",
+            "Mis comisiones no fueron depositadas este mes",
+            "No recibí el pago de comisiones, cuál es el motivo",
+            "Verificar causa de comisiones sin pagar",
+            "Por qué están bloqueadas mis comisiones de la póliza",
+            "Explicar por qué no se procesó el pago de comisiones",
+            "Quiero investigar el motivo de comisiones pendientes sin liberar"],
+            "entity_resolution": "Tienes dos fuentes de información: tabla SQL con detalle de comisiones y (2) calendario de pagos. Analiza primero la tabla SQL: si contiene registros de comisiones bloqueadas, responde indicando el monto retenido y la fecha de retención. Si la tabla SQL está vacía o indica 'No se encontraron registros', ignora los datos SQL y usa únicamente el calendario de pagos para explicar cuándo se espera el próximo depósito de comisiones."
         }
       ]
     },

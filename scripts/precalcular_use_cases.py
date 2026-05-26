@@ -38,6 +38,7 @@ def main():
 
             result[uc_id] = {
                 "embedding": centroid.tolist(),
+                "embeddings_list": embeddings.tolist(),
                 "nombre": nombre,
                 "tipo": pregunta.get("tipo", "sql"),
                 "catalogo": catalogo_key,

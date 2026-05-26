@@ -79,8 +79,8 @@ CATALOG_LABELS = {
 #  umbral: similitud coseno mínima para aceptar la entidad (0-1).
 PARAM_TO_FILTRO = {
     "p.Id":               ("__opp_id__",          "ID de Oportunidad",  "AND p.Id = '{v}'",                                  None),
-    "c.NPN__c":           ("npn",                "NPN",                "AND c.NPN__c = '{v}'",                              0.90),
-    "c.Name":             ("name",              "Agente",             "AND c.Name = '{v}'",                                0.80),
+    "c.NPN__c":           ("npn",                "NPN",                "AND c.NPN__c = '{v}'",                              0.99),
+    "c.Name":             ("name",              "Agente",             "AND c.Name = '{v}'",                                0.95),
     "a.Name_Agencies":    ("agency",             "Agencia",            "AND a.Name_Agencies = '{v}'",                       0.90),
     "o.Carrier":          ("carrier",            "Carrier",            "AND o.Carrier = '{v}'",                             0.85),
     "o.State":            ("state",              "Estado",             "AND o.State = '{v}'",                               0.80),
@@ -372,6 +372,9 @@ EJEMPLOS — observa cómo se eliminan todas las entidades y filtros:
   Usuario: "Quiero ver el resumen de mis contratos activos y pendientes"
   Respuesta: Resumen de contratos
 
+  Usuario: "Porque no llegaron mis comisiones"
+  Respuesta: Razón de falta de pago de comisiones
+
 Consulta del usuario: "{user_query}" """.strip()
 
 
@@ -414,8 +417,12 @@ def detectar_caso_de_uso(
 
     best_id, best_score = None, 0.0
     for uc_id, entry in candidatos.items():
-        uc_emb = torch.tensor(entry["embedding"])
-        score = float(util.cos_sim(q_emb, uc_emb)[0][0])
+        if "embeddings_list" in entry:
+            c_emb = torch.tensor(entry["embeddings_list"])
+            score = float(util.cos_sim(q_emb, c_emb)[0].max())
+        else:
+            uc_emb = torch.tensor(entry["embedding"])
+            score = float(util.cos_sim(q_emb, uc_emb)[0][0])
         if score > best_score:
             best_score, best_id = score, uc_id
 
@@ -1563,7 +1570,8 @@ def ciclo_consultas(
                         detectados_req = extraer_entidades(texto_req, filtros_req, filtro_fijo_key)
                         if any(p in detectados_req for p in filtros_req):
                             entidades.update(detectados_req)
-                            texto_usuario = texto_req
+                            if not texto_usuario:
+                                texto_usuario = texto_req
                             break
                         lbl_list = ", ".join(labels_req)
                         print(f"  ⚠  No se detectó ninguno de los filtros requeridos ({lbl_list}). Intente de nuevo.")
