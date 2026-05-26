@@ -130,6 +130,22 @@ def cargar_filtros_desde_bq():
     """
     filtros["license_source"] = [row.Source__c for row in client.query(query_license_source).result()]
 
+    # Payment Status
+    query_payment_status = """
+        SELECT DISTINCT Payment_Status__c
+        FROM `claroinsurance-dataplatform.salesforce_claro.payment`
+        WHERE Payment_Status__c IS NOT NULL
+    """
+    filtros["payment_status"] = [row.Payment_Status__c for row in client.query(query_payment_status).result()]
+
+    # Payment Type
+    query_payment_type = """
+        SELECT DISTINCT Payment_Type__c
+        FROM `claroinsurance-dataplatform.salesforce_claro.payment`
+        WHERE Payment_Type__c IS NOT NULL
+    """
+    filtros["payment_type"] = [row.Payment_Type__c for row in client.query(query_payment_type).result()]
+
     with open(FILTROS_VALIDOS_PATH, "wb") as f:
         pickle.dump(filtros, f)
 
@@ -137,7 +153,8 @@ def cargar_filtros_desde_bq():
           f"{len(filtros['agency'])} agencias, {len(filtros['name'])} nombres, "
           f"{len(filtros['npn'])} NPNs, {len(filtros['state'])} estados, "
           f"{len(filtros['stage_name'])} stage names, {len(filtros['sub_stage_name'])} sub stages, "
-          f"{len(filtros['account_executives'])} account executives")
+          f"{len(filtros['account_executives'])} account executives, "
+          f"{len(filtros['payment_status'])} payment statuses, {len(filtros['payment_type'])} payment types")
 
     # ── Embeddings pre-computados por filtro ──────────────────────────────────
     print("\nGenerando embeddings pre-computados para búsqueda semántica...")

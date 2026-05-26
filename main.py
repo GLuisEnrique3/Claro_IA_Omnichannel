@@ -78,9 +78,10 @@ CATALOG_LABELS = {
 # ── Mapping: parámetro SQL → (filtro_key, etiqueta_display, snippet_sql, umbral) ──
 #  umbral: similitud coseno mínima para aceptar la entidad (0-1).
 PARAM_TO_FILTRO = {
+    "p.Id":               ("__opp_id__",          "ID de Oportunidad",  "AND p.Id = '{v}'",                                  None),
     "c.NPN__c":           ("npn",                "NPN",                "AND c.NPN__c = '{v}'",                              0.90),
     "c.Name":             ("name",              "Agente",             "AND c.Name = '{v}'",                                0.80),
-    "a.Name_Agencies":    ("agency",             "Agencia",            "AND a.Name_Agencies = '{v}'",                       0.70),
+    "a.Name_Agencies":    ("agency",             "Agencia",            "AND a.Name_Agencies = '{v}'",                       0.90),
     "o.Carrier":          ("carrier",            "Carrier",            "AND o.Carrier = '{v}'",                             0.85),
     "o.State":            ("state",              "Estado",             "AND o.State = '{v}'",                               0.80),
     "o.Line_Of_Business": ("line_of_business",   "Línea de Negocio",   "AND o.Line_Of_Business = '{v}'",                    0.80),
@@ -88,7 +89,11 @@ PARAM_TO_FILTRO = {
     "s.Sub_stage":        ("sub_stage_name",     "Sub-etapa",          "AND s.Sub_stage = '{v}'",                           0.80),
     "ae.Name":            ("account_executives", "Ejecutivo",          "AND ae.Name = '{v}'",                               0.75),
     # Parámetros de tipo fecha — filtro_key "__fecha__" activa el parser de lenguaje natural
-    "p.Pay_on_Date__c":   ("__fecha__",          "Fecha de Pago",      "AND DATE_TRUNC(p.Pay_on_Date__c, MONTH) = DATE '{v}'", None),
+    "p.Pay_on_Date__c":      ("__fecha__",            "Fecha de Pago",    "AND DATE_TRUNC(DATE(p.Pay_on_Date__c), MONTH) = DATE '{v}'",  None),
+    # Commission Month: se activa solo cuando el usuario menciona "commission month" o "mes de comision/es"
+    "p.Commission_Month__c": ("__commission_month__", "Mes de Comisión",  "AND DATE_TRUNC(p.Commission_Month__c, MONTH) = DATE '{v}'",   None),
+    "p.Payment_Status__c":   ("payment_status",       "Estado de Pago",   "AND p.Payment_Status__c = '{v}'",                             0.82),
+    "p.Payment_Type__c":     ("payment_type",         "Tipo de Pago",     "AND p.Payment_Type__c = '{v}'",                               0.82),
     # Parámetro de póliza — filtro_key "__policy_number__" activa extracción por regex
     "p.Policy_Number__c": ("__policy_number__",  "Número de Póliza",   "AND p.Policy_Number__c = '{v}'",                       None),
     # Parámetros de licencias
@@ -201,8 +206,8 @@ def _mostrar_instrucciones():
 
   CONTRATOS
     · Cantidad de Contratos Activos y Pendientes
-    · Verificar status del contrato en el sistema
-    · Identificar motivo del retraso en la aprobación
+    · Verificar status del contrato en el sistema  (*)
+    · Identificar motivo del retraso en la aprobación  (*)
     · Instructivo Gestión de Contratos ACA
     · Instructivo Gestión de Contratos Medicare
     · Instructivo Gestión de Contratos Life
@@ -212,7 +217,16 @@ def _mostrar_instrucciones():
   PAGOS Y COMISIONES
     · Comisiones Pagadas
     · Comisiones Bloqueadas
+    · Detalle Comisiones  (*)
     · Calendario Ciclo de Pago de Comisiones
+    · Porque no me han pagado mis comisiones
+
+  DOCUMENTOS NORMATIVOS
+    · Plazos Estándar de Envío de Contratos
+    · Horarios y Roles del Equipo
+
+  (*) Estas consultas requieren al menos un filtro
+      obligatorio para ejecutarse (ver tabla de filtros).
 
   ══════════════════════════════════════════════════════
   FILTROS QUE RECONOCE EL SISTEMA
@@ -222,36 +236,52 @@ def _mostrar_instrucciones():
   El sistema los detecta aunque los escriba en lenguaje
   natural, sin necesidad de seguir un formato exacto.
 
-  ┌─────────────────┬────────────────────────────────────┐
-  │ FILTRO          │ EJEMPLOS DE USO                    │
-  ├─────────────────┼────────────────────────────────────┤
-  │ Carrier         │ "con Ambetter"                     │
-  │                 │ "de Humana"  /  "solo Aetna"       │
-  ├─────────────────┼────────────────────────────────────┤
-  │ Estado          │ "en Florida"  /  "de Texas"        │
-  │                 │ "para Georgia"                     │
-  ├─────────────────┼────────────────────────────────────┤
-  │ Línea de        │ "de Medicare Advantage"            │
-  │ Negocio         │ "línea ACA"  /  "productos DSNP"   │
-  ├─────────────────┼────────────────────────────────────┤
-  │ Etapa           │ "en estado Blackout"               │
-  │                 │ "etapa In Progress"                │
-  ├─────────────────┼────────────────────────────────────┤
-  │ Sub-etapa       │ "sub-etapa Missing Certification"  │
-  ├─────────────────┼────────────────────────────────────┤
-  │ Agencia         │ "de la agencia Comfort Insurance"  │
-  │                 │ "agentes de Miami Insurance"       │
-  ├─────────────────┼────────────────────────────────────┤
-  │ NPN             │ "del NPN 1234567"                  │
-  │                 │ "agente NPN 9876543"               │
-  ├─────────────────┼────────────────────────────────────┤
-  │ Ejecutivo       │ "ejecutivo Carlos Pérez"           │
-  │                 │ "del AE María López"               │
-  ├─────────────────┼────────────────────────────────────┤
-  │ Fecha de pago   │ "el mes pasado"                    │
-  │                 │ "en mayo 2024"  /  "hace 2 meses"  │
-  │                 │ "este mes"  /  "mayo del 2023"     │
-  └─────────────────┴────────────────────────────────────┘
+  ┌──────────────────────┬─────────────────────────────────────┐
+  │ FILTRO               │ EJEMPLOS DE USO                     │
+  ├──────────────────────┼─────────────────────────────────────┤
+  │ Carrier              │ "con Ambetter"                      │
+  │                      │ "de Humana"  /  "solo Aetna"        │
+  ├──────────────────────┼─────────────────────────────────────┤
+  │ Estado               │ "en Florida"  /  "de Texas"         │
+  │                      │ "para Georgia"                      │
+  ├──────────────────────┼─────────────────────────────────────┤
+  │ Línea de Negocio     │ "de Medicare Advantage"             │
+  │                      │ "línea ACA"  /  "productos DSNP"    │
+  ├──────────────────────┼─────────────────────────────────────┤
+  │ Etapa                │ "en estado Blackout"                │
+  │                      │ "etapa In Progress"                 │
+  ├──────────────────────┼─────────────────────────────────────┤
+  │ Sub-etapa            │ "sub-etapa Missing Certification"   │
+  ├──────────────────────┼─────────────────────────────────────┤
+  │ Agencia              │ "de la agencia Comfort Insurance"   │
+  │                      │ "agentes de Miami Insurance"        │
+  ├──────────────────────┼─────────────────────────────────────┤
+  │ NPN                  │ "del NPN 1234567"                   │
+  │                      │ "agente NPN 9876543"                │
+  ├──────────────────────┼─────────────────────────────────────┤
+  │ Ejecutivo de Cuenta  │ "ejecutivo Carlos Pérez"            │
+  │                      │ "del AE María López"                │
+  ├──────────────────────┼─────────────────────────────────────┤
+  │ Fecha de Pago        │ "el mes pasado"                     │
+  │                      │ "en mayo 2024"  /  "hace 2 meses"   │
+  │                      │ "este mes"  /  "mayo del 2023"      │
+  ├──────────────────────┼─────────────────────────────────────┤
+  │ Mes de Comisión      │ "commission month mayo"             │
+  │                      │ "mes de comisiones abril 2024"      │
+  ├──────────────────────┼─────────────────────────────────────┤
+  │ Número de Póliza (*) │ "póliza H12345678"                  │
+  │                      │ "póliza número A9876543"            │
+  ├──────────────────────┼─────────────────────────────────────┤
+  │ Estado de Pago       │ "status Paid"  /  "pagos Not paid"  │
+  │                      │ "comisiones On-Hold"                │
+  ├──────────────────────┼─────────────────────────────────────┤
+  │ Tipo de Pago         │ "tipo Commission"  /  "Override"    │
+  │                      │ "solo Bonus"  /  "tipo Adjustment"  │
+  ├──────────────────────┼─────────────────────────────────────┤
+  │ ID de Oportunidad(*) │ "id 006Az000001XyZW"               │
+  └──────────────────────┴─────────────────────────────────────┘
+
+  (*) Filtro obligatorio para ciertas consultas de detalle.
 
   ══════════════════════════════════════════════════════
   EJEMPLOS DE CONSULTAS COMPLETAS
@@ -260,13 +290,17 @@ def _mostrar_instrucciones():
   "Contratos pendientes de Ambetter en Florida"
   "Cuántos contratos en Blackout tiene la agencia
    Comfort Insurance con Humana en Texas"
-  "Status del contrato del NPN 1234567"
+  "Status del contrato con Humana en Florida"
   "Por qué está retrasado el contrato del agente
    NPN 9876543 con Aetna"
   "Comisiones pagadas con Humana el mes pasado"
   "Cuánto tengo en comisiones bloqueadas en mayo 2024"
+  "Detalle de comisiones póliza H12345678"
+  "Detalle de comisiones tipo Commission de Humana"
   "Instructivo para contratar con Cigna Supplementary"
   "Cuándo se pagan las comisiones de este mes"
+  "Cuáles son los plazos para enviar contratos"
+  "Horarios y roles del equipo de Claro Insurance"
 
   ══════════════════════════════════════════════════════
   COMANDOS GLOBALES (disponibles en todo momento)
@@ -282,72 +316,61 @@ def _mostrar_instrucciones():
 
 # ── Ruteo por intención natural ───────────────────────────────────────────────
 _PROMPT_NORMALIZAR_INTENT = """Eres un asistente de seguros especializado en el sistema Claro Insurance.
-Tu tarea es leer la consulta de un usuario y extraer el tema principal como una frase nominal corta (máximo 10 palabras).
+Tu tarea es leer la consulta de un usuario y extraer ÚNICAMENTE la intención principal como una frase nominal corta (máximo 8 palabras).
 
-Reglas:
+REGLAS ESTRICTAS:
+- Responde SOLO con la frase nominal. Nada más.
+- Elimina completamente: nombres de carriers, aseguradoras, agencias, agentes, estados, fechas, NPNs, números de póliza, montos y cualquier otro filtro o entidad específica.
+- No incluyas verbos conjugados, sujetos, ni conectores como "de", "para", "con" seguidos de una entidad.
+- No incluyas agrupaciones ni ordenamientos.
 - Escribe siempre en español.
-- Responde ÚNICAMENTE con la frase nominal del tema, sin sujeto, sin verbo conjugado, sin nombres propios, sin comillas ni puntuación final.
-- No incluyas "El usuario consulta", "El usuario pregunta", ni frases con sujeto.
-- No incluyas nombres de personas, agencias, carriers ni fechas específicas.
-- No incluyas referencias a entidades como Carrier, Agentes, Agencias, Estados, Polizas.
-- No incluyas agrupaciones, filtros.
 
-Solo puedes escoger entre:
-    -Cantidad de Contratos Activos
-    -Cantidad de Contratos Pendientes
-    -Verificar status del contrato en el sistema
-    -Identificar motivo del retraso en la aprobación de un contrato
-    -Instructivo Gestión de Contratos ACA
-    -Instructivo Gestión de Contratos Life
-    -Instructivo Gestión de Contratos Medicare
-    -Instructivo Gestión de Contratos Supplementary
-    -Licencias
-    -Comisiones Pagadas
-    -Comisiones Bloqueadas
-    -Calendario Ciclo de Pago de Comisiones
-    -Porque no me han pagado mis comisiones
-    -Consultar reglamentos e instructivos
-    -Plazos estándar de envío de contratos
-    -Horarios y roles del equipo
+EJEMPLOS — observa cómo se eliminan todas las entidades y filtros:
 
-Ejemplos adicionales:
+  Usuario: "Detalle de mis contratos activos en el carrier Humana de la agencia X en Florida"
+  Respuesta: Detalle de contratos activos
+
+  Usuario: "Cuántos contratos pendientes tiene la agencia Comfort Insurance con Ambetter en Texas"
+  Respuesta: Cantidad de contratos pendientes
+
+  Usuario: "Cuánto me pagaron de comisiones el mes pasado con Humana en Medicare Advantage"
+  Respuesta: Comisiones pagadas
+
+  Usuario: "Por qué no me han pagado mis comisiones este mes con Aetna"
+  Respuesta: Razón de falta de pago de comisiones
+
+  Usuario: "Mis comisiones no llegaron, cuál es el motivo y cuándo me las pagan"
+  Respuesta: Razón de falta de pago de comisiones
+
+  Usuario: "Cuándo se pagan las comisiones de Oscar Health en Florida"
+  Respuesta: Calendario de pago de comisiones
+
+  Usuario: "Necesito ver el instructivo de contratos ACA con Aetna en Georgia"
+  Respuesta: Instructivo de gestión de contratos ACA
+
+  Usuario: "Ver el estado de mi licencia en Florida tipo Health"
+  Respuesta: Estado de licencias
+
   Usuario: "Cuáles son los plazos para enviar un contrato con Molina"
-  Respuesta: Plazos estándar de envío de contratos
+  Respuesta: Plazos de envío de contratos
 
   Usuario: "Quién se encarga de aprobar los contratos y cuál es su horario"
   Respuesta: Horarios y roles del equipo
 
-Ejemplos:
-  Usuario: "Deseo consultar el status de mis contratos pendientes"
-  Respuesta: Cantidad de contratos pendientes de aprobación
+  Usuario: "Hay algún problema con la aprobación del contrato de mi agente con Cigna"
+  Respuesta: Motivo de retraso en aprobación de contrato
 
-  Usuario: "Cuánto me pagaron de comisiones el mes pasado con Humana"
-  Respuesta: Total de comisiones pagadas
+  Usuario: "Deseo validar si puedo sacar un contrato con Kaiser en Georgia"
+  Respuesta: Validación para generación de contrato
 
-  Usuario: "Hay algún problema con la aprobación del contrato de mi agente"
-  Respuesta: Motivo de retraso en la aprobación de un contrato
+  Usuario: "Cuál es la oferta de productos disponibles en Florida"
+  Respuesta: Oferta de productos disponibles
 
-  Usuario: "Por qué no me han pagado mis comisiones este mes"
-  Respuesta: Porque no me han pagado mis comisiones
-
-  Usuario: "Mis comisiones no llegaron, cuál es el motivo y cuándo me las pagan"
-  Respuesta: Porque no me han pagado mis comisiones
-
-  Usuario: "Cuando se pagan las comisiones de este mes"
-  Respuesta: Calendario de ciclos de pago de comisiones
-
-  Usuario: "Qué días del mes se procesan los pagos de comisiones de Oscar Health"
-  Respuesta: Calendario de ciclos de pago de comisiones
-
-  Usuario: "Necesito ver el instructivo de contratos ACA con Aetna"
-  Respuesta: Instructivo de gestión de contratos ACA
-
-  Usuario: "Contratos Pendientes de la agencia Comfort Insurance para el Carrier Ambetter"
+  Usuario: "Contratos Pendientes agrupados por Carrier en Texas"
   Respuesta: Cantidad de contratos pendientes
 
-Usuario: "Contratos Pendientes agrupados o ordenados por Carrier"
-  Respuesta: Cantidad de contratos pendientes
-
+  Usuario: "Quiero ver el resumen de mis contratos activos y pendientes"
+  Respuesta: Resumen de contratos
 
 Consulta del usuario: "{user_query}" """.strip()
 
@@ -567,6 +590,32 @@ def extraer_entidades(
                 label_fecha = f"{_MESES_ES[fecha.month - 1].capitalize()} {fecha.year}"
                 sql_snippet = sql_tpl.replace("{v}", val_str)
                 detectados[param] = (label_fecha, 1.0, label, sql_snippet)
+            continue
+        # ─────────────────────────────────────────────────────────────────────
+
+        # ── Rama commission month: solo se activa si el usuario menciona el campo ──
+        if filtro_key == "__commission_month__":
+            _KW_COMMISSION_MONTH = r'commission[\s_-]*month|mes\s+de\s+comisi[oó]n(?:es)?'
+            if re.search(_KW_COMMISSION_MONTH, texto, re.IGNORECASE):
+                fecha = _parse_fecha_natural(texto)
+                if fecha:
+                    val_str = fecha.strftime("%Y-%m-%d")
+                    label_fecha = f"{_MESES_ES[fecha.month - 1].capitalize()} {fecha.year}"
+                    sql_snippet = sql_tpl.replace("{v}", val_str)
+                    detectados[param] = (label_fecha, 1.0, label, sql_snippet)
+            continue
+        # ─────────────────────────────────────────────────────────────────────
+
+        # ── Rama ID de oportunidad: regex después de "id" ────────────────────────
+        if filtro_key == "__opp_id__":
+            match = re.search(
+                r'\bid[:\s]+([A-Za-z0-9]{10,18})',
+                texto, re.IGNORECASE
+            )
+            if match:
+                valor = match.group(1)
+                sql_snippet = sql_tpl.replace("{v}", valor.replace("'", "''"))
+                detectados[param] = (valor, 1.0, label, sql_snippet)
             continue
         # ─────────────────────────────────────────────────────────────────────
 
@@ -795,9 +844,9 @@ def _construir_sql_con_llm(
     descripciones = pregunta.get("descripciones", {})
 
     entidades_lines = []
-    for param, (valor, score, label, _) in entidades.items():
+    for param, v in entidades.items():
         desc = descripciones.get(param, param)
-        entidades_lines.append(f"  - {param} ({desc}): '{valor}'")
+        entidades_lines.append(f"  - {param} ({desc}): '{v[0]}'")
     entidades_str = "\n".join(entidades_lines) if entidades_lines else "  (ninguna)"
 
     # Catálogo completo de columnas para que el LLM use los nombres exactos
@@ -822,12 +871,6 @@ def _construir_sql_con_llm(
         if error_previo else ""
     )
 
-    entity_resolution = pregunta.get("entity_resolution", "")
-    entity_resolution_bloque = (
-        f"\nRESTRICCIÓN ESPECÍFICA DE ESTE CASO (tiene prioridad sobre todo lo demás):\n{entity_resolution}\n"
-        if entity_resolution else ""
-    )
-
     prompt = (
         "Eres un experto en BigQuery SQL para el sistema Claro Insurance.\n\n"
         f"OBJETIVO DE LA CONSULTA: {pregunta['texto']}\n\n"
@@ -842,7 +885,6 @@ def _construir_sql_con_llm(
         f"{filtro_fijo_bloque}"
         f"{solicitud_bloque}"
         f"{error_bloque}"
-        f"{entity_resolution_bloque}"
         "\nREGLAS ESTRICTAS:\n"
         "- Los JOINs de la sintaxis base NO pueden removerse ni modificarse\n"
         "- Si agregas GROUP BY, el campo de agrupación DEBE estar también en el SELECT\n"
@@ -851,6 +893,9 @@ def _construir_sql_con_llm(
         "- Usa ÚNICAMENTE los nombres de columna de la sección REFERENCIA DE COLUMNAS\n"
         "- Responde ÚNICAMENTE con el SQL listo para ejecutar en BigQuery\n"
         "- NO incluyas explicaciones, comentarios, markdown ni backticks\n"
+        "- SOLO puedes generar consultas SELECT de solo lectura. "
+        "Está TERMINANTEMENTE PROHIBIDO generar DELETE, INSERT, UPDATE, DROP, "
+        "TRUNCATE, CREATE, ALTER, MERGE o cualquier operación de escritura o modificación de datos\n"
     )
 
     response = llm_sql_model.generate_content(prompt)
@@ -915,6 +960,15 @@ def ejecutar_consulta(
         if query_log:
             query_log.latencia_sql_ms = int((time.perf_counter() - _t_sql) * 1000)
 
+        # ── Capa de seguridad: solo SELECT permitido ──────────────────────────
+        _SQL_FORBIDDEN = re.compile(
+            r'^\s*(DELETE|INSERT|UPDATE|DROP|TRUNCATE|CREATE|ALTER|MERGE|CALL)\b',
+            re.IGNORECASE | re.MULTILINE,
+        )
+        if _SQL_FORBIDDEN.search(sql_final):
+            return "❌ Operación no permitida. Solo se aceptan consultas de lectura (SELECT)."
+        # ─────────────────────────────────────────────────────────────────────
+
         print()
         print("── Query enviada a BigQuery " + "─" * 27)
         print(sql_final)
@@ -967,7 +1021,7 @@ def ejecutar_consulta(
             f"NO los enumeres uno por uno. Solo indica cuántos se encontraron "
             f"y ofrece al usuario explorar detalles específicos si lo desea.\n"
             f"- Al final agrega estas dos líneas exactas, en este orden:\n"
-            f"  'Le invitamos a realizar otra pregunta para seguir explorando.'\n"
+            f"  'Te invito a realizar otra pregunta para seguir explorando.'\n"
             f"  'Recuerde que si su consulta no fue efectiva, puede escribir \"escalar a un humano\"'.\n"
             f"- NO uses cierres formales como 'Atentamente' ni firmas de ningún tipo.\n"
             f"- Responde en español de forma clara y concisa.\n"
@@ -1275,13 +1329,19 @@ def ejecutar_multiple(
         print("⚠  No se encontraron las sub-consultas referenciadas.")
         return
 
-    # Usar entidades ya extraídas (del paso de confirmación) o extraer si no vienen
-    entidades: dict = entidades_previas or {}
-    if not entidades:
-        for sp in sub_preguntas:
-            if sp.get("tipo") == "sql" and sp.get("parametros"):
-                entidades = extraer_entidades(user_query, sp["parametros"], filtro_fijo_key)
-                break
+    # Construir entidades por sub-caso: cada uno usa solo sus propios parametros
+    entidades_combinadas: dict = entidades_previas or {}
+    if not entidades_combinadas:
+        params_all = list(dict.fromkeys(
+            p for sp in sub_preguntas if sp.get("tipo") == "sql"
+            for p in sp.get("parametros", [])
+        ))
+        if params_all:
+            entidades_combinadas = extraer_entidades(user_query, params_all, filtro_fijo_key)
+
+    def _entidades_para(sp: dict) -> dict:
+        sp_params = set(sp.get("parametros", []))
+        return {p: v for p, v in entidades_combinadas.items() if p in sp_params}
 
     print()
     print(f"  Ejecutando {len(sub_preguntas)} consultas en paralelo...")
@@ -1293,7 +1353,7 @@ def ejecutar_multiple(
             tipo_sp = sp.get("tipo")
             if tipo_sp == "sql":
                 fut = executor.submit(
-                    _ejecutar_consulta_silenciosa, sp, sql_filtro, entidades, user_query
+                    _ejecutar_consulta_silenciosa, sp, sql_filtro, _entidades_para(sp), user_query
                 )
             elif tipo_sp == "rag":
                 fut = executor.submit(_ejecutar_rag_silenciosa, sp, user_query)
@@ -1419,18 +1479,29 @@ def ciclo_consultas(
             print(f"  Se ejecutarán {len(invoca_nombres)} consultas en paralelo:")
             for n in invoca_nombres:
                 print(f"      • {n}")
-            # Extraer entidades ahora para mostrarlas antes de confirmar
+            # Extraer entidades por sub-caso y mostrar agrupadas
             sub_pqs = [preguntas_map_actual[i] for i in pregunta.get("invoca", []) if i in preguntas_map_actual]
-            params_ref = next(
-                (sp["parametros"] for sp in sub_pqs if sp.get("tipo") == "sql" and sp.get("parametros")),
-                []
-            )
-            if params_ref:
-                entidades_previas = extraer_entidades(user_query, params_ref, filtro_fijo_key)
+            entidades_por_subcaso: dict = {}
+            for sp in sub_pqs:
+                if sp.get("tipo") == "sql" and sp.get("parametros"):
+                    entidades_por_subcaso[sp["texto"]] = extraer_entidades(
+                        user_query, sp["parametros"], filtro_fijo_key
+                    )
+            print()
+            for nombre_sp, ents in entidades_por_subcaso.items():
+                print(f"  Entidades detectadas [{nombre_sp}]:")
+                if ents:
+                    for _, (val, sc_e, lbl, _) in ents.items():
+                        print(f"      • {lbl:<20} → {val}  (confianza: {sc_e:.2f})")
+                else:
+                    print(f"      (ninguna)")
+            # Fusionar para ejecución (sin duplicados, el primero gana)
+            entidades_previas = {}
+            for ents in entidades_por_subcaso.values():
+                for param, val in ents.items():
+                    if param not in entidades_previas:
+                        entidades_previas[param] = val
             if entidades_previas:
-                print("  Entidades detectadas:")
-                for _, (val, sc_e, lbl, _) in entidades_previas.items():
-                    print(f"      • {lbl:<20} → {val}  (confianza: {sc_e:.2f})")
                 q.entidades = [
                     {"param": p, "label": v[2], "valor": v[0], "score": v[1]}
                     for p, v in entidades_previas.items()
@@ -1473,6 +1544,30 @@ def ciclo_consultas(
                 else:
                     # Enter → ejecutar consulta base sin filtros
                     texto_usuario, entidades = "", {}
+
+                # ── Validación de filtros requeridos ──────────────────────────
+                filtros_req = pregunta.get("filtros_requeridos", [])
+                if filtros_req and not any(p in entidades for p in filtros_req):
+                    labels_req = [
+                        PARAM_TO_FILTRO[p][1] for p in filtros_req if p in PARAM_TO_FILTRO
+                    ]
+                    print()
+                    print("  ⚠  Esta consulta requiere al menos uno de los siguientes filtros:")
+                    for lbl in labels_req:
+                        print(f"      • {lbl}")
+                    while True:
+                        print()
+                        texto_req = _input("  Ingrese el filtro requerido (o Enter para cancelar): ").strip()
+                        if not texto_req:
+                            raise VoverError
+                        detectados_req = extraer_entidades(texto_req, filtros_req, filtro_fijo_key)
+                        if any(p in detectados_req for p in filtros_req):
+                            entidades.update(detectados_req)
+                            texto_usuario = texto_req
+                            break
+                        lbl_list = ", ".join(labels_req)
+                        print(f"  ⚠  No se detectó ninguno de los filtros requeridos ({lbl_list}). Intente de nuevo.")
+                # ─────────────────────────────────────────────────────────────
 
                 print()
                 print("  Procesando su consulta, por favor espere...")

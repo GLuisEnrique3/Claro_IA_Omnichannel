@@ -8,10 +8,14 @@
           "texto": "Cantidad de Contratos Activos",
           "tipo": "sql",
           "semantic_examples": [
+            "Cantidad de contratos activos",
+            "Total de contratos activos",
+            "Número de contratos activos",
+            "Contratos activos",
+            "Cuántos contratos activos hay",
             "Deseo consultar el status de mis contratos activos",
             "Cuántos contratos tengo",
             "Quiero ver la cantidad de contratos completados",
-            "Cuántas solicitudes de contratación están abiertas",
             "Ver contratos que han sido aprobados",
             "Cuántos agentes tienen contratos activos"
           ],
@@ -29,19 +33,73 @@
         },
         {
           "id": "2",
+          "texto": "Detalle de Contratos Activos",
+          "tipo": "sql",
+          "semantic_examples": [
+            "Detalle de contratos activos",
+            "Listado de contratos activos",
+            "Ver contratos activos detallados",
+            "Desglose de contratos activos",
+            "Deseo ver el detalle de mis contratos activos",
+            "Quiero el listado completo de mis contratos activos"
+          ],
+          "sql": "SELECT c.NPN__c,c.Name,a.Name_Agencies,o.Carrier,o.State,o.Line_Of_Business, COUNT(*) FROM claroinsurance-dataplatform.claro_bi.vw_agent_contracts vw LEFT JOIN `claroinsurance-dataplatform.claro_bi.dim_cslb` o ON o.Id = vw.Carrier_State_line_of_Business__c  LEFT JOIN claroinsurance-dataplatform.claro_bi.dim_contact c ON c.Id = vw.Contracted_Agent__c  LEFT JOIN claroinsurance-dataplatform.claro_bi.dim_account_2 a ON a.Id = c.AccountId  WHERE o.Carrier NOT IN ('All Insurance','Insurance XL') {dynamic_filters}  GROUP BY c.NPN__c,c.Name,a.Name_Agencies,o.Carrier,o.State,o.Line_Of_Business,vw.Status__c",
+          "entity_resolution" : "Debes dar el detalle como respuesta",
+          "parametros": ["c.NPN__c","c.Name","a.Name_Agencies","o.Carrier","o.State","o.Line_Of_Business"],
+          "descripciones": {
+            "c.NPN__c":           "Número de productor nacional del agente (NPN). Identifica de forma única a cada agente de seguros.",
+            "c.Name" :            "Nombre del Agente",
+            "a.Name_Agencies":    "Nombre de la agencia a la que pertenece el agente o contrato.",
+            "o.Carrier":          "Compañía de seguros o aseguradora (ej. Humana, Ambetter, Aetna, Centene, Molina).",
+            "o.State":            "Estado de los Estados Unidos donde aplica el contrato (ej. Florida, Texas, Georgia).",
+            "o.Line_Of_Business": "Línea de negocio o tipo de producto de seguros (ej. Medicare Advantage, ACA, Medicaid, DSNP)."
+          }
+        },
+        {
+          "id": "3",
           "texto": "Cantidad de Contratos Pendientes",
           "tipo": "sql",
           "semantic_examples": [
+            "Cantidad de contratos pendientes",
+            "Total de contratos pendientes",
+            "Contratos pendientes de aprobación",
+            "Número de contratos en proceso",
+            "Contratos sin aprobar",
             "Deseo consultar el status de mis contratos pendientes",
             "Cuántos contratos tengo en proceso de aprobación",
             "Quiero ver la cantidad de contratos que están sin completar",
-            "Cuántas solicitudes de contratación están abiertas",
             "Ver contratos que no han sido aprobados aún",
-            "Cuántos agentes tienen contratos pendientes con Humana",
             "Necesito saber cuántos contratos están en blackout o in progress"
           ],
           "sql": "SELECT COUNT(Distinct p.Id) as Opp_Open FROM `claroinsurance-dataplatform.claro_bi.vw_opportunity` p LEFT JOIN `claroinsurance-dataplatform.claro_bi.dim_opp_stage` s ON s.key_stage = p.key_stage LEFT JOIN `claroinsurance-dataplatform.claro_bi.dim_cslb` o ON o.Id = p.CarrierStateLineOfBusiness_c LEFT JOIN `claroinsurance-dataplatform.salesforce_claro.contact` c ON c.Id = p.Contact__c LEFT JOIN `claroinsurance-dataplatform.claro_bi.dim_account_2` a ON a.Id = c.AccountId  LEFT JOIN `claroinsurance-dataplatform.salesforce_claro.account_executives` ae on c.AE__c = ae.Id WHERE a.Name_Agencies != 'Agency Test' AND a.Name_Agencies IS NOT NULL AND s.StageName IN ('Blackout','Carrier Confirmation','Carrier link to be sent','In Progress - Action Needed','Missing Agent Information','Missing Certification','On hold','Pending Release','Started Contracting') {dynamic_filters}",
-          "entity_resolution" : "",
+          "entity_resolution" : "Debes otorgar como respuesta un resumen en lenguaje natural detallando por campo y variable",          
+          "parametros": ["c.NPN__c","c.Name","a.Name_Agencies","o.Carrier","o.State","o.Line_Of_Business","s.StageName","s.Sub_stage","ae.Name"],
+          "descripciones": {
+            "c.NPN__c":           "Número de productor nacional del agente (NPN). Identifica de forma única a cada agente de seguros.",
+            "c.Name" :            "Nombre del Agente",
+            "a.Name_Agencies":    "Nombre de la agencia a la que pertenece el agente o contrato.",
+            "o.Carrier":          "Compañía de seguros o aseguradora (ej. Humana, Ambetter, Aetna, Centene, Molina).",
+            "o.State":            "Estado de los Estados Unidos donde aplica el contrato (ej. Florida, Texas, Georgia).",
+            "o.Line_Of_Business": "Línea de negocio o tipo de producto de seguros (ej. Medicare Advantage, ACA, Medicaid, DSNP).",
+            "s.StageName":        "Etapa actual del contrato en el flujo de aprobación (ej. In Progress, Pending Release, Blackout).",
+            "s.Sub_stage":        "Sub-etapa detallada dentro del proceso de contratación del agente.",
+            "ae.Name":            "Nombre completo del ejecutivo de cuentas asignado al agente."
+          }
+        },
+          {
+          "id": "4",
+          "texto": "Detalle de Contratos Pendientes",
+          "tipo": "sql",
+          "semantic_examples": [
+            "Detalle de contratos pendientes",
+            "Listado de contratos pendientes",
+            "Ver contratos pendientes detallados",
+            "Desglose de contratos pendientes",
+            "Deseo consultar el detalle de mis contratos pendientes",
+            "Quiero el listado completo de mis contratos pendientes"
+          ],
+          "sql": "SELECT c.NPN__c,c.Name,a.Name_Agencies,o.Carrier,o.State,o.Line_Of_Business,s.StageName,s.Sub_stage, COUNT(Distinct p.Id) as Opp_Open FROM `claroinsurance-dataplatform.claro_bi.vw_opportunity` p LEFT JOIN `claroinsurance-dataplatform.claro_bi.dim_opp_stage` s ON s.key_stage = p.key_stage LEFT JOIN `claroinsurance-dataplatform.claro_bi.dim_cslb` o ON o.Id = p.CarrierStateLineOfBusiness_c LEFT JOIN `claroinsurance-dataplatform.salesforce_claro.contact` c ON c.Id = p.Contact__c LEFT JOIN `claroinsurance-dataplatform.claro_bi.dim_account_2` a ON a.Id = c.AccountId  LEFT JOIN `claroinsurance-dataplatform.salesforce_claro.account_executives` ae on c.AE__c = ae.Id WHERE a.Name_Agencies != 'Agency Test' AND a.Name_Agencies IS NOT NULL AND s.StageName IN ('Blackout','Carrier Confirmation','Carrier link to be sent','In Progress - Action Needed','Missing Agent Information','Missing Certification','On hold','Pending Release','Started Contracting') {dynamic_filters} GROUP BY c.NPN__c,c.Name,a.Name_Agencies,o.Carrier,o.State,o.Line_Of_Business,s.StageName,s.Sub_stage",
+          "entity_resolution" : "Debes dar el detalle como respuesta",
           "parametros": ["c.NPN__c","c.Name","a.Name_Agencies","o.Carrier","o.State","o.Line_Of_Business","s.StageName","s.Sub_stage","ae.Name"],
           "descripciones": {
             "c.NPN__c":           "Número de productor nacional del agente (NPN). Identifica de forma única a cada agente de seguros.",
@@ -56,40 +114,34 @@
           }
         },
         {
-          "id": "3",
-          "texto": "Verificar status del contrato en el sistema",
-          "tipo": "sql",
+          "id": "5",
+          "texto": "Resumen de Contratos",
+          "tipo": "multiple",
+          "invoca": ["2", "4"],
           "semantic_examples": [
-            "Quiero ver el estado actual de un contrato específico",
-            "Cómo está el contrato de mi agente en el sistema",
-            "Necesito revisar en qué etapa está un contrato",
-            "Verificar la etapa y sub-etapa de un contrato",
-            "Consultar el stagename de un contrato",
-            "Ver la fecha de cierre y etapa de una oportunidad",
-            "Buscar el status de un contrato por NPN"
+            "Resumen de contratos",
+            "Estado general de contratos",
+            "Resumen de cartera de contratos",
+            "Resumen de contratos activos y pendientes",
+            "Estado de contratos activos y pendientes",
+            "quiero saber el resumen de mis contratos",
+            "quiero saber el detalle de mis contratos",
+            "Quiero ver el estado actual de mis contratos",
+            "Ver activos y pendientes de mis contratos"
           ],
-          "sql": "SELECT p.Id, p.CloseDate, p.CreatedDate, p.StageName, p.Sub_Stage FROM `claroinsurance-dataplatform.claro_bi.vw_opportunity` p LEFT JOIN `claroinsurance-dataplatform.claro_bi.dim_opp_stage` s ON s.key_stage = p.key_stage LEFT JOIN `claroinsurance-dataplatform.claro_bi.dim_cslb` o ON o.Id = p.CarrierStateLineOfBusiness_c LEFT JOIN `claroinsurance-dataplatform.salesforce_claro.contact` c ON c.Id = p.Contact__c LEFT JOIN `claroinsurance-dataplatform.salesforce_claro.account_executives` ae on c.AE__c = ae.Id  LEFT JOIN `claroinsurance-dataplatform.claro_bi.dim_account_2` a ON a.Id = c.AccountId WHERE a.Name_Agencies != 'Agency Test' AND a.Name_Agencies IS NOT NULL {dynamic_filters}  LIMIT 10",
-          "parametros": ["p.Id","c.NPN__c","c.Name","a.Name_Agencies","o.Carrier","o.State","o.Line_Of_Business","s.StageName","s.Sub_stage","ae.Name"],
-          "entity_resolution" : "",
-          "descripciones": {
-            "p.Id":               "Identificador único de la oportunidad/contrato en Salesforce.",
-            "c.NPN__c":           "Número de productor nacional del agente (NPN).",
-            "c.Name" :             "Nombre del Agente",
-            "a.Name_Agencies":    "Nombre de la agencia a la que pertenece el agente.",
-            "o.Carrier":          "Compañía de seguros o aseguradora (ej. Humana, Ambetter, Aetna).",
-            "o.State":            "Estado de los Estados Unidos donde aplica el contrato.",
-            "o.Line_Of_Business": "Línea de negocio o tipo de producto de seguros.",
-            "s.StageName":        "Etapa actual del contrato en el flujo de aprobación.",
-            "s.Sub_stage":        "Sub-etapa detallada dentro del proceso de contratación.",
-            "ae.Name":            "Nombre completo del ejecutivo de cuentas asignado al agente."
-          }
+          "entity_resolution": "Tienes dos fuentes de datos: (1) Contratos Activos: el total de contratos con estatus activo, y (2) Contratos Pendientes: el total de contratos que están en proceso de aprobación. Presenta una respuesta clara e integrada que indique el detalle de contratos activos tiene el usuario y el detalle de contratos pendientes de aprobación. Incluye un breve resumen ejecutivo del estado general de la cartera de contratos."
         },
         {
-          "id": "4",
+          "id": "6",
           "texto": "Identificar motivo del retraso en la aprobación de un contrato",
           "tipo": "sql",
+          "filtros_requeridos": ["p.Id", "o.Carrier", "o.State"],
           "semantic_examples": [
-            "Por qué está retrasado el contrato de un agente",
+            "Motivo de retraso en aprobación de contrato",
+            "Razón del retraso en contrato",
+            "Causa de demora en aprobación de contrato",
+            "Identificar motivo de retraso en contrato",
+            "Por qué está retrasado el contrato",
             "Cuál es el motivo por el que un contrato no ha sido aprobado",
             "Necesito saber qué está bloqueando la aprobación de un contrato",
             "Ver las notas internas de un contrato demorado",
@@ -115,17 +167,20 @@
           }
         },
         {
-          "id": "5",
+          "id": "7",
           "texto": "Instructivo Gestión de Contratos ACA",
           "tipo": "rag",
           "semantic_examples": [
-            "Cómo se gestiona un contrato ACA con Ambetter",
-            "Quiero ver el instructivo de contratos con Humana ACA",
-            "Cuál es el proceso para contratar con Florida Blue ACA",
-            "Dame el procedimiento para contratar con Molina ACA",
-            "Cómo se hace el contrato con United Health Care ACA",
-            "Necesito el instructivo de contratación ACA de Aetna",
-            "Qué documentos necesito para contratar con Oscar ACA"
+            "Instructivo de gestión de contratos ACA",
+            "Instructivo de contratación ACA",
+            "Proceso de contratación ACA",
+            "Procedimiento para contratar ACA",
+            "Cómo se gestiona un contrato ACA",
+            "Quiero ver el instructivo de contratos ACA",
+            "Cuál es el proceso para contratar ACA",
+            "Dame el procedimiento para contratar ACA",
+            "Necesito el instructivo de contratación ACA",
+            "Qué documentos necesito para contratar ACA"
           ],
           "coleccion_chroma": "instructivos_contratos_aca",
           "embedding_model": "all-MiniLM-L6-v2",
@@ -151,17 +206,18 @@
                       ]
         },
         {
-        "id": "6",
+        "id": "8",
           "texto": "Instructivo Gestión de Contratos Medicare",
           "tipo": "rag",
           "semantic_examples": [
+            "Instructivo de gestión de contratos Medicare",
+            "Instructivo de contratación Medicare",
+            "Proceso de contratación Medicare",
+            "Procedimiento para contratar Medicare",
             "Cómo se gestiona un contrato Medicare",
-            "Quiero ver el instructivo de contratos con Medicare",
-            "Cuál es el proceso para contratar con Medicare",
-            "Dame el procedimiento para contratar con Medicare",
-            "Cómo se hace el contrato con Medicare",
-            "Necesito el instructivo de contratación de Medicare",
-            "Qué documentos necesito para contratar con Medicare"
+            "Quiero ver el instructivo de contratos Medicare",
+            "Necesito el instructivo de contratación Medicare",
+            "Qué documentos necesito para contratar Medicare"
           ],
           "coleccion_chroma": "instructivos_contratos_medicare",
           "embedding_model": "all-MiniLM-L6-v2",
@@ -177,17 +233,17 @@
                       ]
         },
         {
-        "id": "7",
+        "id": "9",
           "texto": "Instructivo Gestión de Contratos Life",
           "tipo": "rag",
           "semantic_examples": [
+            "Instructivo de gestión de contratos Life",
+            "Instructivo de contratación Life",
+            "Proceso de contratación Life",
+            "Procedimiento para contratar Life",
             "Cómo se gestiona un contrato Life",
-            "Quiero ver el instructivo de contratos con Life",
-            "Cuál es el proceso para contratar con Life",
-            "Dame el procedimiento para contratar con Life",
-            "Cómo se hace el contrato con Life",
-            "Necesito el instructivo de contratación de Life",
-            "Qué documentos necesito para contratar con Life"
+            "Necesito el instructivo de contratación Life",
+            "Qué documentos necesito para contratar Life"
           ],
           "coleccion_chroma": "instructivos_contratos_life",
           "embedding_model": "all-MiniLM-L6-v2",
@@ -200,17 +256,17 @@
                       ]
         },
         {
-        "id": "8",
+        "id": "10",
           "texto": "Instructivo Gestión de Contratos Supplementario",
           "tipo": "rag",
           "semantic_examples": [
+            "Instructivo de gestión de contratos Supplementary",
+            "Instructivo de contratación Supplementary",
+            "Proceso de contratación Supplementary",
+            "Procedimiento para contratar Supplementary",
             "Cómo se gestiona un contrato Supplementario",
-            "Quiero ver el instructivo de contratos con Supplementario",
-            "Cuál es el proceso para contratar con Supplementario",
-            "Dame el procedimiento para contratar con Supplementario",
-            "Cómo se hace el contrato con Supplementario",
-            "Necesito el instructivo de contratación de Supplementario",
-            "Qué documentos necesito para contratar con Supplementario"
+            "Necesito el instructivo de contratación Supplementary",
+            "Qué documentos necesito para contratar Supplementary"
           ],
           "coleccion_chroma": "instructivos_contratos_supplementary",
           "embedding_model": "all-MiniLM-L6-v2",
@@ -222,15 +278,20 @@
                       ]
         },
         {
-          "id": "9",
+          "id": "11",
           "texto": "Licencias",
           "tipo": "sql",
           "semantic_examples": [
+            "Estado de licencias",
+            "Consulta de licencias",
+            "Verificación de licencias",
+            "Licencias del agente",
+            "Estatus de licencia",
             "Cual es el estado de mi licencia",
             "Deseo verificar el estado de mi licencia",
             "Deseo consultar sobre la validación de mi licencia"
           ],
-          "sql":"SELECT l.Name as Id,l.Disposition__c,l.SubDisposition__c,l.LicenseState__c ,l.LicenseType__c,l.Status__c,l.Source__c,c.Name,c.NPN__c,a.Name_Agencies, COUNT(*) FROM `claroinsurance-dataplatform.claro_bi.vw_agent_licenses` l left join `claroinsurance-dataplatform.claro_bi.dim_contact` c on l.AgentName__c = c.Id left join `claroinsurance-dataplatform.claro_bi.dim_account_2` as a on a.Id = c.AccountId  {dynamic_filters}  ",
+          "sql":"SELECT l.Name as Id,l.Disposition__c,l.SubDisposition__c,l.LicenseState__c ,l.LicenseType__c,l.Status__c,l.Source__c,c.Name,c.NPN__c,a.Name_Agencies FROM `claroinsurance-dataplatform.claro_bi.vw_agent_licenses` l left join `claroinsurance-dataplatform.claro_bi.dim_contact` c on l.AgentName__c = c.Id left join `claroinsurance-dataplatform.claro_bi.dim_account_2` as a on a.Id = c.AccountId  {dynamic_filters} ",
           "parametros": ["c.NPN__c","c.Name","a.Name_Agencies","l.LicenseState__c","l.LicenseType__c","l.Status__c","l.Disposition__c","l.SubDisposition__c","l.Source__c"],
           "entity_resolution" : "Siempre muestra los resultados en formato de tabla o lista detallada con una fila por licencia. Incluye obligatoriamente los campos: Id (l.Name), Agente (c.Name), NPN (c.NPN__c), Estado de Licencia (LicenseState__c), Tipo (LicenseType__c), Estado Activa/Inactiva (Status__c), Disposición (Disposition__c) y Fuente (Source__c). Nunca omitas el Id de licencia ni colapses múltiples licencias en un resumen de conteo.",
           "descripciones": {
@@ -245,7 +306,46 @@
            "c.NPN__c":"Número de productor nacional del agente (NPN).",
            "a.Name_Agencies":"Nombre de la agencia a la que pertenece el agente o licencia"
           }
-        }  
+        },
+        {
+          "id": "12",
+          "texto": "Oferta de Productos de Claro",
+          "tipo": "sql",
+          "semantic_examples": [
+            "Oferta de productos disponibles",
+            "Catálogo de productos",
+            "Productos disponibles",
+            "Oferta de productos de la empresa",
+            "Cual es la oferta de productos de Claro",
+            "Qué productos ofrece la empresa"
+          ],
+          "sql":"SELECT o.Carrier,o.State,o.Line_Of_Business FROM `claroinsurance-dataplatform.claro_bi.dim_cslb` o",
+          "parametros": ["o.Carrier","o.State","o.Line_Of_Business"],
+          "entity_resolution" : "Ofrece un resumen detallado del resultado tipo tabla",
+          "descripciones": {
+          "o.Carrier":"Compañía de seguros o aseguradora (ej. Humana, Ambetter, Aetna).",
+          "o.State":"Estado de los Estados Unidos donde aplica el contrato (ej. Florida, Texas, Georgia).",
+          "o.Line_Of_Business":"Línea de negocio o tipo de producto de seguros (ej. Medicare Advantage, ACA, Medicaid, DSNP)."
+          }
+        },
+                {
+          "id": "13",
+          "texto": "Solicitud de Validación de Generación de Contrato",
+          "tipo": "multiple",
+          "invoca": ["11", "12"],
+          "semantic_examples": [
+            "Validación para generación de contrato",
+            "Validar generación de contrato",
+            "Solicitud de validación de contrato",
+            "Puedo generar un contrato",
+            "Verificar si puedo contratar",
+            "quiero sacar un contrato",
+            "quiero validar si puedo sacar un contrato",
+            "Deseo validar si puedo generar un contrato"
+          ],
+          "entity_resolution": "Tienes dos fuentes de datos: (1) Licencias: Si el usuario tiene licencia para vender seguro en un estado, y (2) Oferta de Productos de la Empresa, debes otorgar una validacion, si el usuario desea sacar un contrato debes validar que tenga licencia de Salud o Vida en License Type y el state en LicenseState__c y que el negocio ofrezca esos contratos en la consulta (2)"
+        }    
+
       ]
     },
     "B": {
@@ -256,17 +356,20 @@
           "texto": "Comisiones Pagadas",
           "tipo": "sql",
           "semantic_examples": [
-            "Cuánto me han pagado de comisiones este mes",
+            "Comisiones pagadas",
+            "Total de comisiones pagadas",
+            "Pagos de comisiones recibidos",
+            "Monto de comisiones pagadas",
+            "Cuánto me han pagado de comisiones",
             "Ver el total de comisiones que ya fueron pagadas",
-            "Quiero consultar mis comisiones pagadas por Humana",
-            "Cuál fue el pago de comisiones del mes pasado",
-            "Ver cuánto dinero recibí en comisiones en mayo",
-            "Necesito el resumen de pagos de comisiones por carrier",
+            "Cuál fue el pago de comisiones",
+            "Ver cuánto dinero recibí en comisiones",
+            "Necesito el resumen de pagos de comisiones",
             "Cuántas membresías pagadas tuve en el último ciclo"
           ],
-          "sql": "SELECT SUM(SAFE_CAST(p.Net_Payment__c AS FLOAT64)) AS Net_Payment , SUM(SAFE_CAST(p.Members_Paid__c AS INT64)) AS Payment_Memberships FROM `claroinsurance-dataplatform.claro_bi.Payment_Commission` p LEFT JOIN `claroinsurance-dataplatform.claro_bi.dim_cslb` o ON o.Id = p.Carrier_State_line_of_Business__c   LEFT JOIN `claroinsurance-dataplatform.claro_bi.dim_contact` c ON c.Id = p.Contact_pay LEFT JOIN `claroinsurance-dataplatform.claro_bi.dim_account_2` a ON a.Id = c.AccountId LEFT JOIN `claroinsurance-dataplatform.claro_bi.BOB_TD` b ON p.Policy_Number__c = b.Policy_Number__c WHERE p.Main_Payment__c = True AND p.Payment_Type__c = 'Commission' AND p.Payment_Status__c IN ('Paid','Paid by carrier') {dynamic_filters} ",
-          "parametros": ["c.NPN__c","c.Name","a.Name_Agencies","o.Carrier","o.State","o.Line_Of_Business","p.Pay_on_Date__c","p.Policy_Number__c"],
-          "entity_resolution" : "",
+          "sql": "SELECT COALESCE(SUM(CASE WHEN p.Payment_Type__c NOT IN ('Override','Bonus') THEN SAFE_CAST(p.Members_Paid__c AS INT64) ELSE 0 END ), 0) AS Payment_Memberships, SUM(SAFE_CAST(p.Net_Payment__c AS FLOAT64)) AS Net_Payment,SUM(CASE WHEN SAFE_CAST(p.Net_Payment__c AS FLOAT64) > 0 THEN SAFE_CAST(p.Net_Payment__c AS FLOAT64) ELSE 0 END) AS Payment,SUM(CASE WHEN SAFE_CAST(p.Net_Payment__c AS FLOAT64) < 0 THEN SAFE_CAST(p.Net_Payment__c AS FLOAT64) ELSE 0 END) AS Debit,SUM(SAFE_CAST(p.Members_Paid__c AS INT64)) AS General_Members FROM `claroinsurance-dataplatform.salesforce_claro.payment` p LEFT JOIN `claroinsurance-dataplatform.claro_bi.dim_cslb` o ON o.Id = p.Carrier_State_line_of_Business__c LEFT JOIN `claroinsurance-dataplatform.claro_bi.dim_contact` c ON c.Id = p.Contact_Payee__c LEFT JOIN `claroinsurance-dataplatform.claro_bi.dim_account_2` a ON a.Id = c.AccountId WHERE p.Internal_Company_lookup__c = 'a081G00000C9sU8QAJ'AND (p.Payment_Status__c = 'Paid' OR p.Payment_Status__c = 'Paid by carrier' OR p.Payment_Status__c = 'Pending') {dynamic_filters} ",
+          "parametros": ["c.NPN__c","c.Name","a.Name_Agencies","o.Carrier","o.State","o.Line_Of_Business","p.Pay_on_Date__c","p.Policy_Number__c","p.Commission_Month__c"],
+          "entity_resolution" : "Payment_Memberships hace referencia a los miembros pagados, aqui solo se contemplan pagos por Payment Type Comission, El Net Payment es el monto en dolares pagado al agente, puede ser positivo (Payment) o negativo (Debit), y General_Members es la membresía general considerada en los pagos de Net Payment. Cuando el usuario quiera saber sus comisiones, le referimos el campo de Net Payment y Payment Memberships.El campo Pay on Date se trabaja como DATE_TRUNC(DATE(p.Pay_on_Date__c),MONTH)",
           "descripciones": {
             "c.NPN__c":           "Número de productor nacional del agente (NPN).",
             "c.Name" :             "Nombre del Agente",
@@ -274,8 +377,11 @@
             "o.Carrier":          "Compañía de seguros o aseguradora (ej. Humana, Ambetter, Aetna).",
             "o.State":            "Estado de los Estados Unidos donde aplica la póliza.",
             "o.Line_Of_Business": "Línea de negocio o tipo de producto de seguros.",
-            "p.Pay_on_Date__c":   "Fecha de pago de la comisión en formato diario. Acepta expresiones como 'el mes pasado', 'mayo 2024', 'hace 3 meses', 'este mes'.Siempre debes trabajarlo como DATE_TRUNC(p.Pay_on_Date__c,MONTH)",
-            "p.Policy_Number__c": "Número de Póliza"
+            "p.Pay_on_Date__c":   "Fecha de pago de la comisión de la Agencia al cliente en formato diario. Acepta expresiones como 'el mes pasado', 'mayo 2024', 'hace 3 meses', 'este mes'.Siempre debes trabajarlo como DATE_TRUNC(DATE(p.Pay_on_Date__c),MONTH)",
+            "p.Policy_Number__c": "Número de Póliza",
+            "p.Commission_Month__c" : "Fecha de pago de la comisión del Carrier a la Agencia en formato mensual para luego ser liberada al Agente, a través de Pay on Date. Acepta expresiones como 'el mes pasado', 'mayo 2024', 'hace 3 meses', 'este mes'.Siempre debes trabajarlo como DATE_TRUNC(p.Commission_Month__c,MONTH)",
+            "p.Net_Payment__c":    "Es el monto pagado al agente"
+
           
           }
         },
@@ -298,9 +404,9 @@
             "Hay comisiones que no se han procesado, cuánto es",
             "Necesito ver qué pagos de comisiones están pendientes de liberación"
           ],
-          "sql": "SELECT SUM(SAFE_CAST(p.Net_Payment__c AS FLOAT64)) AS Net_Payment , SUM(SAFE_CAST(p.Members_Paid__c AS INT64)) AS Payment_Memberships FROM `claroinsurance-dataplatform.claro_bi.Payment_Commission` p LEFT JOIN `claroinsurance-dataplatform.claro_bi.dim_cslb` o ON o.Id = p.Carrier_State_line_of_Business__c   LEFT JOIN `claroinsurance-dataplatform.claro_bi.dim_contact` c ON c.Id = p.Contact_pay LEFT JOIN `claroinsurance-dataplatform.claro_bi.dim_account_2` a ON a.Id = c.AccountId LEFT JOIN `claroinsurance-dataplatform.claro_bi.BOB_TD` b ON p.Policy_Number__c = b.Policy_Number__c WHERE p.Main_Payment__c = True AND p.Payment_Type__c = 'Commission' AND p.Payment_Status__c NOT IN ('Paid','Paid by carrier') {dynamic_filters} ",
-          "parametros": ["c.NPN__c","c.Name","a.Name_Agencies","o.Carrier","o.State","o.Line_Of_Business","p.Pay_on_Date__c","p.Policy_Number__c"],
-          "entity_resolution" : "",
+          "sql": "SELECT COALESCE(SUM(CASE WHEN p.Payment_Type__c NOT IN ('Override','Bonus') THEN SAFE_CAST(p.Members_Paid__c AS INT64) ELSE 0 END ), 0) AS Payment_Memberships, SUM(SAFE_CAST(p.Net_Payment__c AS FLOAT64)) AS Net_Payment,SUM(CASE WHEN SAFE_CAST(p.Net_Payment__c AS FLOAT64) > 0 THEN SAFE_CAST(p.Net_Payment__c AS FLOAT64) ELSE 0 END) AS Payment,SUM(CASE WHEN SAFE_CAST(p.Net_Payment__c AS FLOAT64) < 0 THEN SAFE_CAST(p.Net_Payment__c AS FLOAT64) ELSE 0 END) AS Debit,SUM(SAFE_CAST(p.Members_Paid__c AS INT64)) AS General_Members FROM `claroinsurance-dataplatform.salesforce_claro.payment` p LEFT JOIN `claroinsurance-dataplatform.claro_bi.dim_cslb` o ON o.Id = p.Carrier_State_line_of_Business__c LEFT JOIN `claroinsurance-dataplatform.claro_bi.dim_contact` c ON c.Id = p.Contact_Payee__c LEFT JOIN `claroinsurance-dataplatform.claro_bi.dim_account_2` a ON a.Id = c.AccountId WHERE p.Internal_Company_lookup__c = 'a081G00000C9sU8QAJ'AND p.Payment_Status__c NOT IN ('Paid','Paid by carrier','Pending') {dynamic_filters} ",
+          "parametros": ["c.NPN__c","c.Name","a.Name_Agencies","o.Carrier","o.State","o.Line_Of_Business","p.Pay_on_Date__c","p.Policy_Number__c","p.Commission_Month__c"],
+          "entity_resolution" : "Payment_Memberships hace referencia a los miembros no pagados o pendientes, aqui solo se contemplan pagos por Payment Type Comission, El Net Payment es el monto bloqueado o no pagado al agente, puede ser positivo (Payment) o negativo (Debit), y General_Members es la membresía general considerada en los pagos bloqueados de Net Payment. Cuando el usuario quiera saber sus comisiones bloqueadas, le referimos el campo de Net Payment y Payment Memberships.",
           "descripciones": {
             "c.NPN__c":           "Número de productor nacional del agente (NPN).",
             "c.Name" :             "Nombre del Agente",
@@ -308,14 +414,50 @@
             "o.Carrier":          "Compañía de seguros o aseguradora (ej. Humana, Ambetter, Aetna).",
             "o.State":            "Estado de los Estados Unidos donde aplica la póliza.",
             "o.Line_Of_Business": "Línea de negocio o tipo de producto de seguros.",
-            "p.Pay_on_Date__c":   "Fecha de pago de la comisión en formato diario. Acepta expresiones como 'el mes pasado', 'mayo 2024', 'hace 3 meses', 'este mes'. Siempre debes trabajarlo como DATE_TRUNC(p.Pay_on_Date__c,MONTH)",
-            "p.Policy_Number__c": "Número de Póliza"
+            "p.Pay_on_Date__c":   "Fecha de pago de la comisión de la Agencia al cliente en formato diario. Acepta expresiones como 'el mes pasado', 'mayo 2024', 'hace 3 meses', 'este mes'.Siempre debes trabajarlo como DATE_TRUNC(DATE(p.Pay_on_Date__c),MONTH)",
+            "p.Policy_Number__c": "Número de Póliza",
+            "p.Commission_Month__c" : "Fecha de pago de la comisión del Carrier a la Agencia en formato mensual para luego ser liberada al Agente, a través de Pay on Date. Acepta expresiones como 'el mes pasado', 'mayo 2024', 'hace 3 meses', 'este mes'.Siempre debes trabajarlo como DATE_TRUNC(p.Commission_Month__c,MONTH)",
+            "p.Net_Payment__c":    "Es el monto bloqueado o pendiente que corresponde al agente"
+          }
+        },
+                {
+          "id": "3",
+          "texto": "Detalle Comisiones",
+          "tipo": "sql",
+          "filtros_requeridos": ["p.Policy_Number__c"],
+          "semantic_examples": [
+            "Detalle de comisiones",
+            "Desglose de comisiones",
+            "Detalle de pagos de comisiones",
+            "Listado de comisiones por póliza",
+            "Quiero ver el detalle de mis comisiones",
+            "Mostrar el desglose de pagos de comisiones por póliza",
+            "Ver línea por línea mis comisiones",
+            "Necesito el detalle de comisiones por membresía",
+            "Ver el listado completo de pagos de comisiones",
+            "Quiero ver los pagos de comisiones uno por uno"
+          ],
+          "sql": "SELECT p.Policy_Number__c,b.Member_First_Name__c,b.Member_Last_Name__c,o.Carrier,o.State,p.Payment_Type__c,DATE(p.Commission_Month__c) as Commision_Month__c,DATE(p.Pay_on_Date__c) as Pay_on_Date__c,c.Name as Payment_Contact,p.Payment_Status__c,a.Name_Agencies as Master_Agency,a.Subagencia_Name as Sub_Agency,p.Members_Paid__c,p.Net_Payment__c FROM `claroinsurance-dataplatform.salesforce_claro.payment` p LEFT JOIN `claroinsurance-dataplatform.claro_bi.dim_cslb` o ON o.Id = p.Carrier_State_line_of_Business__c LEFT JOIN `claroinsurance-dataplatform.claro_bi.dim_contact` c ON c.Id = p.Contact_Payee__c LEFT JOIN `claroinsurance-dataplatform.claro_bi.dim_account_2` a ON a.Id = c.AccountId LEFT JOIN `claroinsurance-dataplatform.claro_bi.BOB_TD` b ON p.Policy_Number__c = b.Policy_Number__c WHERE p.Internal_Company_lookup__c = 'a081G00000C9sU8QAJ'{dynamic_filters} ",
+          "parametros": ["c.NPN__c","c.Name","a.Name_Agencies","o.Carrier","o.State","o.Line_Of_Business","p.Pay_on_Date__c","p.Policy_Number__c","p.Payment_Type__c","p.Payment_Status__c","p.Commission_Month__c"],
+          "entity_resolution" : "Detalle Comisiones retorna registros individuales de pagos. Cada fila representa un pago específico con: número de póliza, nombre del miembro, carrier, estado, tipo de pago, mes de comisión (Commission_Month), fecha de pago al agente (Pay_on_Date), contacto de pago, status del pago, agencia maestra, sub-agencia, miembros pagados y monto neto. Presenta siempre los resultados en formato de tabla. Commission_Month es la fecha en que el Carrier pagó a la Agencia; Pay_on_Date es la fecha en que la Agencia liberó el pago al agente.",
+          "descripciones": {
+            "c.NPN__c":               "Número de productor nacional del agente (NPN).",
+            "c.Name" :                "Nombre del Agente",
+            "a.Name_Agencies":        "Nombre de la agencia a la que pertenece el agente.",
+            "o.Carrier":              "Compañía de seguros o aseguradora (ej. Humana, Ambetter, Aetna).",
+            "o.State":                "Estado de los Estados Unidos donde aplica la póliza.",
+            "o.Line_Of_Business":     "Línea de negocio o tipo de producto de seguros.",
+            "p.Pay_on_Date__c":       "Fecha de pago de la comisión de la Agencia al cliente en formato diario. Acepta expresiones como 'el mes pasado', 'mayo 2024', 'hace 3 meses', 'este mes'.Siempre debes trabajarlo como DATE_TRUNC(p.Pay_on_Date__c,MONTH)",
+            "p.Policy_Number__c":     "Número de Póliza",
+            "p.Commission_Month__c" : "Fecha de pago de la comisión del Carrier a la Agencia en formato mensual para luego ser liberada al Agente, a través de Pay on Date. Acepta expresiones como 'el mes pasado', 'mayo 2024', 'hace 3 meses', 'este mes'.Siempre debes trabajarlo como DATE_TRUNC(p.Commission_Month__c,MONTH)",
+            "p.Net_Payment__c":       "Es el monto bloqueado o pendiente que corresponde al agente",
+            "p.Payment_Status__c":    "Status del Pago: ('Paid','Pending','Not paid','Paid by carrier','On-Hold','Internal Offset')",
+            "p.Payment_Type__c":      "Tipo de Pago: ('Fee Payment','Other','Adjustment','Bonus','Commissions in advance','Technology Maintenance Fee','Administrative Fee','Commission','Transfer Fee','Override','Capital Payment')"
 
-          
           }
         },
         {
-          "id": "3",
+          "id": "4",
           "texto": "Calendario Ciclo de Pago de Comisiones",
           "tipo": "rag",
           "semantic_examples": [
@@ -337,17 +479,20 @@
           "entity_resolution": ""
         },
         {
-          "id": "4",
+          "id": "5",
           "texto": "Porque no me han pagado mis comisiones",
           "tipo": "multiple",
           "invoca": ["2", "3"],
           "semantic_examples": [
+            "Razón de falta de pago de comisiones",
+            "Motivo de comisiones no pagadas",
+            "Por qué no llegaron mis comisiones",
+            "Causa de pago pendiente de comisiones",
             "Por qué no me han pagado mis comisiones",
             "Cuál es la razón por la que no recibí mi pago",
             "Mis comisiones no llegaron, qué pasó",
             "No me han depositado mis comisiones, por qué",
-            "Quiero saber por qué mis comisiones están retenidas y cuándo me van a pagar",
-            "Cuál es el problema con mis comisiones, no me han llegado",
+            "Quiero saber por qué mis comisiones están retenidas",
             "Necesito entender por qué no tengo el pago de mis comisiones"],
             "entity_resolution": "Tienes dos fuentes de información: (1) tabla SQL con comisiones bloqueadas y (2) calendario de pagos. Analiza primero la tabla SQL: si contiene registros de comisiones bloqueadas, responde indicando el monto retenido y la fecha de retención. Si la tabla SQL está vacía o indica 'No se encontraron registros', ignora los datos SQL y usa únicamente el calendario de pagos para explicar cuándo se espera el próximo depósito de comisiones."
         }
@@ -361,13 +506,14 @@
           "texto": "Plazos Estándar de Envío de Contratos",
           "tipo": "rag",
           "semantic_examples": [
+            "Plazos de envío de contratos",
+            "Plazos estándar de contratos",
+            "Tiempos de entrega de contratos",
+            "Fechas límite de envío de contratos",
             "Cuáles son los plazos para enviar contratos",
             "Cuánto tiempo tengo para entregar la documentación del contrato",
-            "Fechas límite para el envío de contratos",
             "Cuál es el plazo estándar para completar un contrato",
-            "En cuántos días debo enviar el contrato al carrier",
-            "Cuáles son los tiempos de entrega de contratos",
-            "Plazos de envío de contratos estándar",
+            "En cuántos días debo enviar el contrato",
             "Tiempo máximo para gestionar un contrato"
           ],
           "entity_resolution": "",
@@ -380,13 +526,15 @@
           "texto": "Horarios y Roles del Equipo",
           "tipo": "rag",
           "semantic_examples": [
+            "Horarios y roles del equipo",
+            "Roles del equipo de trabajo",
+            "Horarios de atención del equipo",
+            "Responsabilidades del equipo",
             "Cuál es el horario de atención del equipo",
             "Quién es responsable de los contratos",
-            "Cuáles son los roles del equipo de Claro Insurance",
-            "A quién debo contactar para resolver un problema de contrato",
-            "Horario de trabajo del equipo de gestión",
+            "Cuáles son los roles del equipo",
+            "A quién debo contactar para resolver un problema",
             "Qué rol se encarga de las comisiones",
-            "Cuáles son las responsabilidades de cada rol",
             "Quién aprueba los contratos en el equipo"
           ],
           "entity_resolution": "",
