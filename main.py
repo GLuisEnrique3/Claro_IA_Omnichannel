@@ -1537,6 +1537,28 @@ def ciclo_consultas(
 
         try:
             if tipo_pregunta == "multiple":
+                # ── Validación de filtros requeridos para flujos múltiples ────
+                filtros_req_m = pregunta.get("filtros_requeridos", [])
+                if filtros_req_m and not any(p in entidades_previas for p in filtros_req_m):
+                    labels_req_m = [
+                        PARAM_TO_FILTRO[p][1] for p in filtros_req_m if p in PARAM_TO_FILTRO
+                    ]
+                    print()
+                    print("  ⚠  Esta consulta requiere al menos uno de los siguientes filtros:")
+                    for lbl in labels_req_m:
+                        print(f"      • {lbl}")
+                    while True:
+                        print()
+                        texto_req_m = _input("  Ingrese el filtro requerido (o Enter para cancelar): ").strip()
+                        if not texto_req_m:
+                            raise VoverError
+                        detectados_req_m = extraer_entidades(texto_req_m, filtros_req_m, filtro_fijo_key)
+                        if any(p in detectados_req_m for p in filtros_req_m):
+                            entidades_previas.update(detectados_req_m)
+                            break
+                        lbl_list_m = ", ".join(labels_req_m)
+                        print(f"  ⚠  No se detectó ninguno de los filtros requeridos ({lbl_list_m}). Intente de nuevo.")
+                # ─────────────────────────────────────────────────────────────
                 print()
                 print("  Procesando su consulta, por favor espere...")
                 ejecutar_multiple(

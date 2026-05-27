@@ -32,6 +32,12 @@ def main():
             nombre = pregunta["texto"]
             examples = pregunta.get("semantic_examples", [])
 
+            # Casos sin semantic_examples se excluyen del PKL de búsqueda semántica.
+            # Siguen siendo accesibles vía "invoca" en flujos múltiples.
+            if not examples:
+                print(f"  {uc_id}: '{nombre}' — omitido (sin semantic_examples, solo invocable)")
+                continue
+
             texts = [nombre] + examples
             embeddings = model.encode(texts, convert_to_numpy=True)
             centroid = np.mean(embeddings, axis=0)
