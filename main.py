@@ -11,6 +11,25 @@ from config.chroma_client import ChromaClient
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
+_LLM_MAX_RETRIES = 3
+_LLM_RETRY_BASE_S = 5  # backoff: 5s, 10s, 20s
+
+
+def _llm_call(model, prompt: str):
+    """Llama al modelo LLM con retry/backoff para errores 429 (rate limit)."""
+    for attempt in range(1, _LLM_MAX_RETRIES + 1):
+        try:
+            return model.generate_content(prompt)
+        except Exception as exc:
+            msg = str(exc)
+            is_rate_limit = "429" in msg or "Resource exhausted" in msg or "rate" in msg.lower()
+            if is_rate_limit and attempt < _LLM_MAX_RETRIES:
+                wait = _LLM_RETRY_BASE_S * (2 ** (attempt - 1))
+                print(f"   ⏳ Rate limit Vertex AI, reintentando en {wait}s (intento {attempt}/{_LLM_MAX_RETRIES})...")
+                time.sleep(wait)
+                continue
+            raise
+
 # ── Nombres de meses en español (para parser de fechas) ───────────────────────
 _MESES_NUM = {
     "enero": 1, "febrero": 2, "marzo": 3, "abril": 4,
@@ -55,7 +74,7 @@ TIPOS_USUARIO = {
         "nombre": "Agente NPN",
         "filtro_key": "npn",
         "sql_filtro": "AND c.NPN__c = '{valor}'",
-        "catalogos": ["A", "B"],
+        "catalogos": ["A", "B","C"],
         "umbral": 0.95,
         "prompt_id": "Ingrese su NPN: ",
     },
@@ -339,41 +358,17 @@ EJEMPLOS — observa cómo se eliminan todas las entidades y filtros:
   Usuario: "Por qué no me han pagado mis comisiones este mes con Aetna"
   Respuesta: Razón de falta de pago de comisiones
 
-  Usuario: "Mis comisiones no llegaron, cuál es el motivo y cuándo me las pagan"
-  Respuesta: Razón de falta de pago de comisiones
-
   Usuario: "Cuándo se pagan las comisiones de Oscar Health en Florida"
   Respuesta: Calendario de pago de comisiones
 
   Usuario: "Necesito ver el instructivo de contratos ACA con Aetna en Georgia"
   Respuesta: Instructivo de gestión de contratos ACA
 
-  Usuario: "Ver el estado de mi licencia en Florida tipo Health"
-  Respuesta: Estado de licencias
-
-  Usuario: "Cuáles son los plazos para enviar un contrato con Molina"
-  Respuesta: Plazos de envío de contratos
-
-  Usuario: "Quién se encarga de aprobar los contratos y cuál es su horario"
-  Respuesta: Horarios y roles del equipo
-
-  Usuario: "Hay algún problema con la aprobación del contrato de mi agente con Cigna"
-  Respuesta: Motivo de retraso en aprobación de contrato
-
-  Usuario: "Deseo validar si puedo sacar un contrato con Kaiser en Georgia"
-  Respuesta: Validación para generación de contrato
-
-  Usuario: "Cuál es la oferta de productos disponibles en Florida"
-  Respuesta: Oferta de productos disponibles
-
-  Usuario: "Contratos Pendientes agrupados por Carrier en Texas"
-  Respuesta: Cantidad de contratos pendientes
-
   Usuario: "Quiero ver el resumen de mis contratos activos y pendientes"
   Respuesta: Resumen de contratos
 
-  Usuario: "Porque no llegaron mis comisiones"
-  Respuesta: Razón de falta de pago de comisiones
+  Usuario: "Ver el estado de mi licencia en Florida tipo Health"
+  Respuesta: Estado de licencias
 
 Consulta del usuario: "{user_query}" """.strip()
 
@@ -383,7 +378,7 @@ def transformar_consulta_con_llm(user_query: str) -> str:
     """Normaliza la consulta del usuario a una descripción de intención estándar."""
     try:
         prompt = _PROMPT_NORMALIZAR_INTENT.format(user_query=user_query)
-        response = llm_model.generate_content(prompt)
+        response = _llm_call(llm_model, prompt)
         normalized = response.text.strip().split("\n")[0].strip()
         return normalized if normalized else user_query
     except Exception:
@@ -905,7 +900,7 @@ def _construir_sql_con_llm(
         "TRUNCATE, CREATE, ALTER, MERGE o cualquier operación de escritura o modificación de datos\n"
     )
 
-    response = llm_sql_model.generate_content(prompt)
+    response = _llm_call(llm_sql_model, prompt)
     sql = response.text.strip()
     # Eliminar bloques markdown si el LLM los agrega de todas formas
     sql = re.sub(r"^```(?:sql)?\s*", "", sql, flags=re.MULTILINE)
@@ -1007,7 +1002,14 @@ def ejecutar_consulta(
         if not rows:
             return "No se encontraron resultados para su consulta."
 
-        tabla = _formatear_filas(rows)
+        _MAX_FILAS_PROMPT = 80
+        filas_truncadas = len(rows) > _MAX_FILAS_PROMPT
+        tabla = _formatear_filas(rows[:_MAX_FILAS_PROMPT])
+        aviso_truncado = (
+            f"\n[NOTA: Se muestran las primeras {_MAX_FILAS_PROMPT} filas de {len(rows)} totales. "
+            "Indica al usuario que puede agregar filtros para acotar los resultados.]\n"
+            if filas_truncadas else ""
+        )
         solicitud_display = texto_usuario if texto_usuario else pregunta["texto"]
         entity_resolution = pregunta.get("entity_resolution", "")
         entity_resolution_bloque = (
@@ -1017,7 +1019,7 @@ def ejecutar_consulta(
         prompt = (
             f"Eres un asistente especializado de Claro Insurance.\n"
             f"El usuario solicitó: \"{solicitud_display}\".\n\n"
-            f"Datos obtenidos de la base de datos:\n{tabla}\n\n"
+            f"Datos obtenidos de la base de datos:\n{tabla}{aviso_truncado}\n\n"
             f"INSTRUCCIONES DE RESPUESTA:\n"
             f"- Saluda brevemente e informa el resultado de forma directa y profesional.\n"
             f"- Si los datos tienen UNA sola fila con totales o conteos globales: preséntala como un número resumen.\n"
@@ -1037,7 +1039,7 @@ def ejecutar_consulta(
 
         _t_resp = time.perf_counter()
         try:
-            response = llm_model.generate_content(prompt)
+            response = _llm_call(llm_model, prompt)
             if query_log:
                 query_log.latencia_respuesta_ms = int((time.perf_counter() - _t_resp) * 1000)
             return response.text
@@ -1161,7 +1163,7 @@ def ejecutar_rag(pregunta_config: dict, user_query: str, query_log=None) -> None
     _sep()
     _t_resp = time.perf_counter()
     try:
-        response = llm_model.generate_content(prompt)
+        response = _llm_call(llm_model, prompt)
         if query_log:
             query_log.latencia_respuesta_ms = int((time.perf_counter() - _t_resp) * 1000)
         print(response.text.strip())
@@ -1308,7 +1310,7 @@ def _sintetizar_respuestas_multiples(
         f"  'Recuerde que si su consulta no fue efectiva, puede escribir \"escalar a un humano\"'.\n"
     )
     try:
-        response = llm_model.generate_content(prompt)
+        response = _llm_call(llm_model, prompt)
         return response.text.strip()
     except Exception as exc:
         return f"❌ Error al generar la respuesta: {exc}"
@@ -1407,17 +1409,20 @@ def ciclo_consultas(
     sql_filtro: str | None,
     filtro_fijo_key: str | None,
 ):
+    _next_query: str | None = None
     while True:
-        _sep()
-        print()
-        print("¿Qué desea consultar hoy?")
-        #print("  (Escriba su consulta en lenguaje natural)")
-        print()
-
-        user_query = _input("  Su consulta: ").strip()
-        if not user_query:
-            print("  Por favor ingrese una consulta.")
-            continue
+        if _next_query is not None:
+            user_query = _next_query
+            _next_query = None
+        else:
+            _sep()
+            print()
+            print("¿Qué desea consultar hoy?")
+            print()
+            user_query = _input("  Su consulta: ").strip()
+            if not user_query:
+                print("  Por favor ingrese una consulta.")
+                continue
 
         q = get_session().nueva_consulta()
         q.query_original = user_query
@@ -1440,9 +1445,10 @@ def ciclo_consultas(
 
         if use_case_entry is None:
             print()
-            print("  No fue posible identificar un flujo relacionado con su solicitud.")
+            print("  No fue posible identificar un flujo asociado a su solicitud. Puede reformular su mensaje para intentar nuevamente el proceso automatizado, o escalar su caso a un agente humano para obtener asistencia personalizada.")
             print()
             print("  Por favor reformule su consulta con más detalle.")
+            q.reiniciar_timer()  # excluir el tiempo de espera del usuario al decidir si reintenta
             otra = _input_sn("  ¿Desea intentar de nuevo? (S/N): ")
             if otra != "S":
                 print()
@@ -1520,45 +1526,40 @@ def ciclo_consultas(
         else:
             print("  Sin ninguna entidad detectada.")
 
-        print()
-        confirmar = _input_sn(
-            "  ¿Desea Confirmar? (S = confirmar / N = reformular filtros / Enter = omitir filtros): ",
-            con_enter=True,
-        )
-
-        # N → volver al prompt de consulta (flujo incorrecto o quiere cambiar todo)
-        if confirmar == "N":
-            print()
-            print("  Por favor reformule su consulta.")
-            get_session().cerrar_consulta()
-            continue
-
         q.tipo_ejecucion = tipo_pregunta
 
         try:
+            # ── Validación de filtros requeridos + confirmación ───────────────
+            filtros_req_pre = pregunta.get("filtros_requeridos", [])
+            confirmar = None
+
+            if filtros_req_pre and tipo_pregunta != "rag" and not all(p in entidades_previas for p in filtros_req_pre):
+                labels_req_pre = [PARAM_TO_FILTRO[p][1] for p in filtros_req_pre if p in PARAM_TO_FILTRO]
+                lbl_slash_pre = "/".join(labels_req_pre)
+                print()
+                print(f"  Esta consulta requiere identificar los siguientes filtros/entidades ({lbl_slash_pre}),")
+                print("  por favor reformule su pregunta considerando dichos filtros")
+                print()
+                nueva_query = _input("  Su consulta: ").strip()
+                if not nueva_query:
+                    raise VoverError
+                _next_query = nueva_query
+                get_session().cerrar_consulta()
+                continue  # reinicia el pipeline completo con la nueva consulta
+            else:
+                print()
+                confirmar = _input_sn(
+                    "  ¿Desea Confirmar? (S = confirmar / N = reformular filtros / Enter = omitir filtros): ",
+                    con_enter=True,
+                )
+                if confirmar == "N":
+                    raise VoverError
+            # ─────────────────────────────────────────────────────────────────
+
+            # Reiniciar timer: excluir el tiempo que el usuario tardó en confirmar
+            q.reiniciar_timer()
+
             if tipo_pregunta == "multiple":
-                # ── Validación de filtros requeridos para flujos múltiples ────
-                filtros_req_m = pregunta.get("filtros_requeridos", [])
-                if filtros_req_m and not any(p in entidades_previas for p in filtros_req_m):
-                    labels_req_m = [
-                        PARAM_TO_FILTRO[p][1] for p in filtros_req_m if p in PARAM_TO_FILTRO
-                    ]
-                    print()
-                    print("  ⚠  Esta consulta requiere al menos uno de los siguientes filtros:")
-                    for lbl in labels_req_m:
-                        print(f"      • {lbl}")
-                    while True:
-                        print()
-                        texto_req_m = _input("  Ingrese el filtro requerido (o Enter para cancelar): ").strip()
-                        if not texto_req_m:
-                            raise VoverError
-                        detectados_req_m = extraer_entidades(texto_req_m, filtros_req_m, filtro_fijo_key)
-                        if any(p in detectados_req_m for p in filtros_req_m):
-                            entidades_previas.update(detectados_req_m)
-                            break
-                        lbl_list_m = ", ".join(labels_req_m)
-                        print(f"  ⚠  No se detectó ninguno de los filtros requeridos ({lbl_list_m}). Intente de nuevo.")
-                # ─────────────────────────────────────────────────────────────
                 print()
                 print("  Procesando su consulta, por favor espere...")
                 ejecutar_multiple(
@@ -1568,36 +1569,8 @@ def ciclo_consultas(
             elif tipo_pregunta == "rag":
                 ejecutar_rag(pregunta, user_query, query_log=q)
             else:
-                if confirmar == "S":
-                    texto_usuario, entidades = user_query, entidades_previas
-                else:
-                    # Enter → ejecutar consulta base sin filtros
-                    texto_usuario, entidades = "", {}
-
-                # ── Validación de filtros requeridos ──────────────────────────
-                filtros_req = pregunta.get("filtros_requeridos", [])
-                if filtros_req and not any(p in entidades for p in filtros_req):
-                    labels_req = [
-                        PARAM_TO_FILTRO[p][1] for p in filtros_req if p in PARAM_TO_FILTRO
-                    ]
-                    print()
-                    print("  ⚠  Esta consulta requiere al menos uno de los siguientes filtros:")
-                    for lbl in labels_req:
-                        print(f"      • {lbl}")
-                    while True:
-                        print()
-                        texto_req = _input("  Ingrese el filtro requerido (o Enter para cancelar): ").strip()
-                        if not texto_req:
-                            raise VoverError
-                        detectados_req = extraer_entidades(texto_req, filtros_req, filtro_fijo_key)
-                        if any(p in detectados_req for p in filtros_req):
-                            entidades.update(detectados_req)
-                            if not texto_usuario:
-                                texto_usuario = texto_req
-                            break
-                        lbl_list = ", ".join(labels_req)
-                        print(f"  ⚠  No se detectó ninguno de los filtros requeridos ({lbl_list}). Intente de nuevo.")
-                # ─────────────────────────────────────────────────────────────
+                texto_usuario = user_query if confirmar == "S" else ""
+                entidades    = entidades_previas if confirmar == "S" else {}
 
                 print()
                 print("  Procesando su consulta, por favor espere...")

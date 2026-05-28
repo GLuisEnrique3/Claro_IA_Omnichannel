@@ -356,12 +356,20 @@ DOCUMENTS = [
             "category": "horarios"
         }
     },
-        {
+     {
         "filename": "ARC_OFF_EXCHANGES_FAQ.pdf",
         "collection": "documentos_normativos",
         "chunking": "sliding",
         "metadata": {
             "category": "faq"
+        }
+    },
+    {
+        "filename": "CLARO_INSURANCE_FAQ.pdf",
+        "collection": "documentos_normativos",
+        "chunking": "sliding",
+        "metadata": {
+            "category": "claro insurance faq"
         }
     }
     ]

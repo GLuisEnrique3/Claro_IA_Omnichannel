@@ -46,6 +46,10 @@ class QueryLog:
         self.latencia_total_ms: int | None = None
         self._t_inicio = time.perf_counter()
 
+    def reiniciar_timer(self) -> None:
+        """Reinicia el timer justo antes de la ejecución, para excluir el tiempo de espera del usuario."""
+        self._t_inicio = time.perf_counter()
+
     def finalizar(self) -> None:
         self.latencia_total_ms = int((time.perf_counter() - self._t_inicio) * 1000)
 
