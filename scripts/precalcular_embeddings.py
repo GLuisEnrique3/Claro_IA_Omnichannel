@@ -27,14 +27,21 @@ MAX_CHARS_PER_CHUNK = 600
 
 DOCUMENTS = [
     {
-        "filename": "Calendario Pago Comisiones.pdf",
+        "filename": "Calendario Pago de Liquidaciones 2026.pdf",
+        "collection": "calendario_liquidaciones",
+        "chunking": "lines",
+        "metadata": {
+            "category": "calendario_liquidaciones"
+        }
+    },
+    {
+        "filename": "Calendario Pago de Comisiones 2026.pdf",
         "collection": "calendario_comisiones",
         "chunking": "lines",
         "metadata": {
             "category": "calendario_comisiones"
         }
     },
-
     {
         "filename": "CM-IN-02 Instructivo Gestión de contratos con OSCAR ACA.pdf",
         "collection": "instructivos_contratos_aca",

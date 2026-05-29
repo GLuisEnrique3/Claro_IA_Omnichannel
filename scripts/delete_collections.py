@@ -14,11 +14,7 @@ from config.chroma_client import ChromaClient
 #COLLECTION_NAME = "instructivos_contratos_supplementary"
 
 COLLECTIONS_TO_DELETE = [
-    "instructivos_contratos_aca",
-    "instructivos_contratos_medicare",
-    "instructivos_contratos_life",
-    "instructivos_contratos_supplementary",
-    "documentos_normativos",
+    "calendario_comisiones",
 ]
 
 # =========================================================

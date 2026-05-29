@@ -339,7 +339,7 @@ Tu tarea es leer la consulta de un usuario y extraer ÚNICAMENTE la intención p
 
 REGLAS ESTRICTAS:
 - Responde SOLO con la frase nominal. Nada más.
-- Elimina completamente: nombres de carriers, aseguradoras, agencias, agentes, estados, fechas, NPNs, números de póliza, montos y cualquier otro filtro o entidad específica.
+- Elimina completamente: nombres de carriers,lineas de negocios, aseguradoras, agencias, agentes, estados, fechas, NPNs, números de póliza, montos y cualquier otro filtro o entidad específica.
 - No incluyas verbos conjugados, sujetos, ni conectores como "de", "para", "con" seguidos de una entidad.
 - No incluyas agrupaciones ni ordenamientos.
 - Escribe siempre en español.
@@ -364,8 +364,17 @@ EJEMPLOS — observa cómo se eliminan todas las entidades y filtros:
   Usuario: "Necesito ver el instructivo de contratos ACA con Aetna en Georgia"
   Respuesta: Instructivo de gestión de contratos ACA
 
-  Usuario: "Quiero ver el resumen de mis contratos activos y pendientes"
+  Usuario: "Dame el resumen de mis contratos activos y pendientes"
   Respuesta: Resumen de contratos
+
+  Usuario: "Cuántos contratos activos tengo con Humana en Florida"
+  Respuesta: Cantidad de contratos activos
+
+  Usuario: "Dame el detalle completo de mis contratos activos y pendientes"
+  Respuesta: Detalle general de contratos
+
+  Usuario: "Quiero ver el detalle de mis contratos activos con Ambetter"
+  Respuesta: Detalle de contratos activos
 
   Usuario: "Ver el estado de mi licencia en Florida tipo Health"
   Respuesta: Estado de licencias
