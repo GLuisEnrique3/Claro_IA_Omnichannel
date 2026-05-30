@@ -94,6 +94,15 @@ CATALOG_LABELS = {
     for key, data in USE_CASES.get("options", {}).items()
 }
 
+# Permisos de catálogos por tipo de usuario (configurable en data/catalog_permissions.json).
+_CATALOG_PERMS_PATH = Path(__file__).parent / "data" / "catalog_permissions.json"
+_CATALOG_PERMS: dict = {}
+try:
+    with open(_CATALOG_PERMS_PATH, encoding="utf-8") as _f:
+        _CATALOG_PERMS = json.load(_f)
+except Exception:
+    _CATALOG_PERMS = {}
+
 # ── Mapping: parámetro SQL → (filtro_key, etiqueta_display, snippet_sql, umbral) ──
 #  umbral: similitud coseno mínima para aceptar la entidad (0-1).
 PARAM_TO_FILTRO = {
@@ -1632,7 +1641,9 @@ def main():
                 else:
                     print(f"✅ Bienvenido, {nombre_tipo}")
 
-                ciclo_consultas(tipo["catalogos"], sql_filtro, tipo["filtro_key"])
+                _perms = _CATALOG_PERMS.get(tipo_key)
+                _catalogos = [c for c in tipo["catalogos"] if c in _perms] if _perms else tipo["catalogos"]
+                ciclo_consultas(_catalogos, sql_filtro, tipo["filtro_key"])
                 break
 
             except MenuError:

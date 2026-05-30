@@ -51,7 +51,8 @@
             "Ver contratos activos detallados",
             "Desglose de contratos activos",
             "Deseo ver el detalle de mis contratos activos",
-            "Quiero el listado completo de mis contratos activos"
+            "Quiero el listado completo de mis contratos activos",
+            "Dame el resumen de mis contratos activos"
           ],
           "sql": "SELECT o.Carrier,o.State,o.Line_Of_Business,COUNT(*) FROM claroinsurance-dataplatform.claro_bi.vw_agent_contracts vw LEFT JOIN `claroinsurance-dataplatform.claro_bi.dim_cslb` o ON o.Id = vw.Carrier_State_line_of_Business__c  LEFT JOIN claroinsurance-dataplatform.claro_bi.dim_contact c ON c.Id = vw.Contracted_Agent__c  LEFT JOIN claroinsurance-dataplatform.claro_bi.dim_account_2 a ON a.Id = c.AccountId  WHERE o.Carrier NOT IN ('All Insurance','Insurance XL') {dynamic_filters}  GROUP BY o.Carrier,o.State,o.Line_Of_Business",
           "entity_resolution": "Debes dar el detalle como respuesta",
@@ -70,8 +71,7 @@
             "o.Carrier": "Compañía de seguros o aseguradora (ej. Humana, Ambetter, Aetna, Centene, Molina).",
             "o.State": "Estado de los Estados Unidos donde aplica el contrato (ej. Florida, Texas, Georgia).",
             "o.Line_Of_Business": "Línea de negocio o tipo de producto de seguros (ej. Medicare Advantage, ACA, Medicaid, DSNP)."
-          },
-          "filtros_requeridos": ["o.Carrier", "o.State", "o.Line_Of_Business"]
+          }        
         },
         {
           "_comment_": "Cantidad de Contratos Pendientes",
@@ -130,10 +130,11 @@
             "Detalle de documentación de contrato pendiente",
             "¿Hay algún problema técnico en el proceso de finalización del contrato?",
             "¿Qué documentación falta para completar el onboarding del agente?",
-            "¿Hay algún problema técnico en el proceso de finalización del contrato?"
+            "¿Hay algún problema técnico en el proceso de finalización del contrato?",
+            "Dame el resumen de mis contratos pendientes"
           ],
-          "sql": "SELECT o.Carrier,o.State,o.Line_Of_Business,s.StageName,s.Sub_stage, COUNT(Distinct p.Id) as Opp_Open FROM `claroinsurance-dataplatform.claro_bi.vw_opportunity` p LEFT JOIN `claroinsurance-dataplatform.claro_bi.dim_opp_stage` s ON s.key_stage = p.key_stage LEFT JOIN `claroinsurance-dataplatform.claro_bi.dim_cslb` o ON o.Id = p.CarrierStateLineOfBusiness_c LEFT JOIN `claroinsurance-dataplatform.salesforce_claro.contact` c ON c.Id = p.Contact__c LEFT JOIN `claroinsurance-dataplatform.claro_bi.dim_account_2` a ON a.Id = c.AccountId  LEFT JOIN `claroinsurance-dataplatform.salesforce_claro.account_executives` ae on c.AE__c = ae.Id WHERE a.Name_Agencies != 'Agency Test' AND a.Name_Agencies IS NOT NULL AND s.StageName IN ('Blackout','Carrier Confirmation','Carrier link to be sent','In Progress - Action Needed','Missing Agent Information','Missing Certification','On hold','Pending Release','Started Contracting') {dynamic_filters} GROUP BY o.Carrier,o.State,o.Line_Of_Business,s.StageName,s.Sub_stage",
-          "entity_resolution": "Debes dar el detalle como respuesta, cuando te hablen de documentación te basas en los campos de StageName y Sub_stage",
+          "sql": "SELECT o.Carrier,o.State,o.Line_Of_Business,s.StageName COUNT(Distinct p.Id) as Opp_Open FROM `claroinsurance-dataplatform.claro_bi.vw_opportunity` p LEFT JOIN `claroinsurance-dataplatform.claro_bi.dim_opp_stage` s ON s.key_stage = p.key_stage LEFT JOIN `claroinsurance-dataplatform.claro_bi.dim_cslb` o ON o.Id = p.CarrierStateLineOfBusiness_c LEFT JOIN `claroinsurance-dataplatform.salesforce_claro.contact` c ON c.Id = p.Contact__c LEFT JOIN `claroinsurance-dataplatform.claro_bi.dim_account_2` a ON a.Id = c.AccountId  LEFT JOIN `claroinsurance-dataplatform.salesforce_claro.account_executives` ae on c.AE__c = ae.Id WHERE a.Name_Agencies != 'Agency Test' AND a.Name_Agencies IS NOT NULL AND s.StageName IN ('Blackout','Carrier Confirmation','Carrier link to be sent','In Progress - Action Needed','Missing Agent Information','Missing Certification','On hold','Pending Release','Started Contracting') {dynamic_filters} GROUP BY o.Carrier,o.State,o.Line_Of_Business,s.StageName",
+          "entity_resolution": "Debes dar el detalle como respuesta, cuando te hablen de documentación te basas en los campos de StageName y Sub_stage. Ejecuta la query sintaxis sin agregar mas columnas.",
           "parametros": [
             "c.NPN__c",
             "c.Name",
@@ -154,8 +155,7 @@
             "s.StageName": "Etapa actual del contrato en el flujo de aprobación (ej. In Progress, Pending Release, Blackout).",
             "s.Sub_stage": "Sub-etapa detallada dentro del proceso de contratación del agente.",
             "ae.Name": "Nombre completo del ejecutivo de cuentas asignado al agente."
-          },
-          "filtros_requeridos": ["o.Carrier", "o.State", "o.Line_Of_Business"]
+          }
         },
         {
           "_comment_": "Cantidad de Contratos Inactivo",
@@ -224,8 +224,7 @@
             "o.Carrier": "Compañía de seguros o aseguradora (ej. Humana, Ambetter, Aetna, Centene, Molina).",
             "o.State": "Estado de los Estados Unidos donde aplica el contrato (ej. Florida, Texas, Georgia).",
             "o.Line_Of_Business": "Línea de negocio o tipo de producto de seguros (ej. Medicare Advantage, ACA, Medicaid, DSNP)."
-          },
-          "filtros_requeridos": ["o.Carrier", "o.State", "o.Line_Of_Business"]
+          }
         }, 
         {
           "_comment_": "Detalle General de Contratos (activos Y pendientes combinados con desglose)",
@@ -237,6 +236,7 @@
             "4"
           ],
           "semantic_examples": [
+            "Resumen de Contratos General",
             "Detalle general de contratos",
             "Dame el detalle completo de mis contratos activos y pendientes",
             "Ver el desglose de todos mis contratos activos y pendientes",
@@ -516,83 +516,6 @@
             "¿Puedo solicitar un nuevo contrato para operar?"
           ],
           "entity_resolution": "Tienes dos fuentes de datos: (1) Licencias: Si el usuario tiene licencia para vender seguro en un estado, y (2) Oferta de Productos de la Empresa, debes otorgar una validacion, si el usuario desea sacar un contrato debes validar que tenga licencia de Salud o Vida en License Type y el state en LicenseState__c y que el negocio ofrezca esos contratos en la consulta (2)"
-        },
-        {
-          "_comment_": "Sub-query interna: Resumen Activos Agrupado por Carrier/State/LOB",
-          "id": "16",
-          "texto": "Resumen Activos Agrupado",
-          "tipo": "sql",
-          "sql": "SELECT o.Carrier, o.State, o.Line_Of_Business, COUNT(*) as Contratos_Activos FROM claroinsurance-dataplatform.claro_bi.vw_agent_contracts vw LEFT JOIN `claroinsurance-dataplatform.claro_bi.dim_cslb` o ON o.Id = vw.Carrier_State_line_of_Business__c LEFT JOIN claroinsurance-dataplatform.claro_bi.dim_contact c ON c.Id = vw.Contracted_Agent__c LEFT JOIN claroinsurance-dataplatform.claro_bi.dim_account_2 a ON a.Id = c.AccountId WHERE o.Carrier NOT IN ('All Insurance','Insurance XL') {dynamic_filters} GROUP BY o.Carrier, o.State, o.Line_Of_Business ORDER BY o.Carrier, o.State",
-          "entity_resolution": "Muestra el conteo de contratos activos agrupado por Carrier, State y Line of Business en formato de tabla o lista clara.",
-          "parametros": [
-            "c.NPN__c",
-            "c.Name",
-            "a.Name_Agencies",
-            "o.Carrier",
-            "o.State",
-            "o.Line_Of_Business"
-          ],
-          "descripciones": {
-            "c.NPN__c": "Número de productor nacional del agente (NPN).",
-            "c.Name": "Nombre del Agente",
-            "a.Name_Agencies": "Nombre de la agencia.",
-            "o.Carrier": "Compañía de seguros (ej. Humana, Ambetter, Aetna).",
-            "o.State": "Estado de los Estados Unidos.",
-            "o.Line_Of_Business": "Línea de negocio (ej. Medicare Advantage, ACA, Medicaid)."
-          }
-        },
-        {
-          "_comment_": "Sub-query interna: Resumen Pendientes Agrupado por Carrier/State/LOB",
-          "id": "17",
-          "texto": "Resumen Pendientes Agrupado",
-          "tipo": "sql",
-          "sql": "SELECT o.Carrier, o.State, o.Line_Of_Business, COUNT(DISTINCT p.Id) as Contratos_Pendientes FROM `claroinsurance-dataplatform.claro_bi.vw_opportunity` p LEFT JOIN `claroinsurance-dataplatform.claro_bi.dim_opp_stage` s ON s.key_stage = p.key_stage LEFT JOIN `claroinsurance-dataplatform.claro_bi.dim_cslb` o ON o.Id = p.CarrierStateLineOfBusiness_c LEFT JOIN `claroinsurance-dataplatform.salesforce_claro.contact` c ON c.Id = p.Contact__c LEFT JOIN `claroinsurance-dataplatform.claro_bi.dim_account_2` a ON a.Id = c.AccountId LEFT JOIN `claroinsurance-dataplatform.salesforce_claro.account_executives` ae on c.AE__c = ae.Id WHERE a.Name_Agencies != 'Agency Test' AND a.Name_Agencies IS NOT NULL AND s.StageName IN ('Blackout','Carrier Confirmation','Carrier link to be sent','In Progress - Action Needed','Missing Agent Information','Missing Certification','On hold','Pending Release','Started Contracting') {dynamic_filters} GROUP BY o.Carrier, o.State, o.Line_Of_Business ORDER BY o.Carrier, o.State",
-          "entity_resolution": "Muestra el conteo de contratos pendientes agrupado por Carrier, State y Line of Business en formato de tabla o lista clara.",
-          "parametros": [
-            "c.NPN__c",
-            "c.Name",
-            "a.Name_Agencies",
-            "o.Carrier",
-            "o.State",
-            "o.Line_Of_Business",
-            "s.StageName",
-            "ae.Name"
-          ],
-          "descripciones": {
-            "c.NPN__c": "Número de productor nacional del agente (NPN).",
-            "c.Name": "Nombre del Agente",
-            "a.Name_Agencies": "Nombre de la agencia.",
-            "o.Carrier": "Compañía de seguros (ej. Humana, Ambetter, Aetna).",
-            "o.State": "Estado de los Estados Unidos.",
-            "o.Line_Of_Business": "Línea de negocio (ej. Medicare Advantage, ACA, Medicaid).",
-            "s.StageName": "Etapa actual del contrato pendiente.",
-            "ae.Name": "Ejecutivo de cuentas asignado."
-          }
-        },
-        {
-          "_comment_": "Resumen de Contratos: conteo agrupado de activos Y pendientes por Carrier/State/LOB",
-          "id": "18",
-          "texto": "Resumen de Contratos",
-          "tipo": "multiple",
-          "invoca": [
-            "16",
-            "17"
-          ],
-          "semantic_examples": [
-            "Resumen de contratos",
-            "Dame el resumen de mis contratos",
-            "Resumen de contratos activos y pendientes",
-            "Cuántos contratos activos y pendientes tengo por carrier",
-            "Vista general de mi cartera de contratos",
-            "Resumen ejecutivo de contratos activos y pendientes",
-            "Panorama general de mis contratos",
-            "Dame un overview de mis contratos activos y pendientes",
-            "¿Cómo va mi cartera en general?",
-            "Estado general de contratos activos y pendientes",
-            "Resumen de cartera de contratos",
-            "quiero saber el resumen de mis contratos"
-          ],
-          "entity_resolution": "Tienes dos fuentes de datos: (1) Resumen Activos: conteo de contratos activos agrupado por Carrier/State/LOB, y (2) Resumen Pendientes: conteo de contratos pendientes agrupado por Carrier/State/LOB. Presenta un resumen comparativo integrado: muestra por cada Carrier/State/LOB cuántos contratos están activos y cuántos están pendientes. Al final incluye los totales generales de activos y pendientes."
         }
       ]
     },
