@@ -108,9 +108,10 @@ def sql_response(
             f"- Si los datos son registros individuales (IDs, contratos, oportunidades): "
             f"NO los enumeres uno por uno. Solo indica cuántos se encontraron "
             f"y ofrece al usuario explorar detalles específicos si lo desea.\n"
+            f"- Tutea siempre al usuario, usa 'tú' en lugar de 'usted'.\n"
             f"- Al final agrega estas dos líneas exactas, en este orden:\n"
-            f"  'Te invito a realizar otra pregunta para seguir explorando.'\n"
-            f"  'Recuerde que si su consulta no fue efectiva, puede escribir \"escalar a un humano\"'.\n"
+            f"  '{pregunta.get('ending_resolution', 'Te invito a realizar otra pregunta para seguir explorando.')}'\n"
+            f"  'Recuerda que si tu consulta no fue efectiva, puedes escribir \"escalar a un humano\"'.\n"
             f"- NO uses cierres formales como 'Atentamente' ni firmas de ningún tipo.\n"
             f"- Responde en español de forma clara y concisa.\n"
             f"{entity_resolution_bloque}"
@@ -168,11 +169,12 @@ def rag_response(
         f"Basándote ÚNICAMENTE en los siguientes fragmentos de documentos:\n\n"
         f"{contexto}\n\n"
         f"Responde directamente la pregunta en español de forma clara y concisa. "
+        f"Tutea siempre al usuario, usa 'tú' en lugar de 'usted'. "
         f"Si la información no está en los documentos, indícalo. "
         f"NO uses cierres formales como 'Atentamente' ni firmas. "
         f"Al final agrega estas dos líneas exactas, en este orden: "
-        f"'Le invitamos a realizar otra pregunta para seguir explorando.' "
-        f"'Recuerde que si su consulta no fue efectiva, puede escribir \"escalar a un humano\"'."
+        f"'{pregunta_config.get('ending_resolution', 'Te invitamos a realizar otra pregunta para seguir explorando.')}' "
+        f"'Recuerda que si tu consulta no fue efectiva, puedes escribir \"escalar a un humano\"'."
         f"{entity_resolution_bloque}"
     )
     _t_resp = _time.perf_counter()
@@ -258,4 +260,5 @@ def multiple_response(
         user_query,
         resultados,
         entity_resolution=pregunta.get("entity_resolution", ""),
+        cierre=pregunta.get("cierre", ""),
     )

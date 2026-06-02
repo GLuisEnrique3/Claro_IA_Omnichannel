@@ -20,6 +20,7 @@ class QueryLog:
         self.valor_identificado = valor_identificado
         self.timestamp = datetime.datetime.utcnow().isoformat() + "Z"
         self.query_original: str = ""
+        self.query_reescrita: str = ""
         self.query_normalizado: str = ""
         self.caso_catalogo: str | None = None
         self.caso_nombre: str | None = None
@@ -60,6 +61,7 @@ class QueryLog:
             "tipo_usuario": self.tipo_usuario,
             "valor_identificado": self.valor_identificado,
             "query_original": self.query_original,
+            "query_reescrita": self.query_reescrita,
             "query_normalizado": self.query_normalizado,
             "caso_catalogo": self.caso_catalogo,
             "caso_nombre": self.caso_nombre,

@@ -38,4 +38,5 @@ desktop.ini
 
 # Api Experimental
 
-**/api.py
+app/
+

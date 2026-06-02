@@ -7,6 +7,7 @@ _ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(_ROOT))
 
 import streamlit as st
+import streamlit.components.v1 as _components
 
 from main import (
     TIPOS_USUARIO,
@@ -16,6 +17,7 @@ from main import (
     PARAM_TO_FILTRO,
     _buscar_semantico,
     transformar_consulta_con_llm,
+    reescribir_consulta,
     detectar_caso_de_uso,
     extraer_entidades,
     ejecutar_consulta,
@@ -35,17 +37,21 @@ _KW_VOLVER       = {"volver", "back"}
 _KW_MENU         = {"nueva sesión", "nueva sesion"}
 _KW_INSTRUCCIONES = {"instrucciones", "help", "ayuda", "guia", "guía"}
 _KW_ESCALAR      = {"escalar", "escalar a un humano"}
+_KW_SALUDO       = {"hola", "hola!", "hey", "buenas", "buenas tardes", "buenos días", "buenos dias", "buenas noches"}
 
 _CATALOG_INFO = {
     "A": {
         "nombre": "Contratos",
         "emoji": "📋",
         "temas": [
-            "Contratos activos y pendientes",
+            "Cantidad y detalle de contratos activos, pendientes e inactivos",
+            "Detalle general de contratos (activos + pendientes combinados)",
             "Status del contrato en el sistema `(*)`",
             "Motivo del retraso en la aprobación `(*)`",
             "Instructivos de gestión (ACA · Medicare · Life · Supplementary)",
             "Licencias",
+            "Oferta de productos disponibles por carrier y estado",
+            "Validación para generación de contrato `(*)`",
         ],
     },
     "B": {
@@ -55,8 +61,14 @@ _CATALOG_INFO = {
             "Comisiones pagadas",
             "Comisiones bloqueadas",
             "Detalle de comisiones `(*)`",
-            "Calendario de ciclo de pago",
-            "Razones de pago pendiente o bloqueado",
+            "Pre-liquidación de comisiones",
+            "Detalle de pre-liquidación `(*)`",
+            "Frecuencia de liquidación por carrier",
+            "Calendario de pago de comisiones a agentes",
+            "Estado del contrato y agente por póliza `(*)`",
+            "Razones de pago pendiente o bloqueado `(*)`",
+            "Detalle de reconciliaciones por póliza `(*)`",
+            "Guía de reconciliaciones de comisiones",
         ],
     },
     "C": {
@@ -65,7 +77,8 @@ _CATALOG_INFO = {
         "temas": [
             "Plazos estándar de envío de contratos",
             "Horarios y roles del equipo",
-            "Instructivos operativos",
+            "ARC Off-Exchanges FAQ",
+            "Claro Insurance FAQ",
         ],
     },
 }
@@ -352,6 +365,11 @@ def _render_sidebar():
         st.markdown("**📝 Query original**")
         st.code(d.get("query_original", "—"), language=None)
 
+        reescrita = d.get("query_reescrita")
+        if reescrita:
+            st.markdown("**✏️ Query reescrita**")
+            st.info(reescrita)
+
         st.markdown("**🔄 Query normalizada**")
         st.code(d.get("query_normalizada", "—"), language=None)
 
@@ -470,6 +488,13 @@ def show_chat():
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
 
+    # Scroll automático al último mensaje
+    _components.html(
+        "<script>window.parent.scrollTo(0, window.parent.document.body.scrollHeight);</script>",
+        height=0,
+        scrolling=False,
+    )
+
     # Confirmación pendiente
     if st.session_state.pending:
         pending = st.session_state.pending
@@ -514,14 +539,18 @@ def show_chat():
 
             if q:
                 d = st.session_state.debug_info
-                q.query_original   = pending["user_query"]
-                q.query_normalizado = d.get("query_normalizada", "")
-                q.caso_nombre      = nombre_caso
-                q.caso_catalogo    = use_case_entry.get("catalogo")
-                q.caso_score       = score
-                q.caso_exitoso     = True
-                q.tipo_ejecucion   = tipo_pregunta
-                q.entidades        = [
+                q.query_original            = pending["user_query"]
+                q.query_reescrita           = d.get("query_reescrita", "")
+                q.query_normalizado         = d.get("query_normalizada", "")
+                q.caso_nombre               = nombre_caso
+                q.caso_catalogo             = use_case_entry.get("catalogo")
+                q.caso_score                = score
+                q.caso_exitoso              = True
+                q.tipo_ejecucion            = tipo_pregunta
+                q.latencia_normalizacion_ms = d.get("latencia_normalizacion_ms")
+                q.latencia_deteccion_ms     = d.get("latencia_deteccion_ms")
+                q.latencia_entidades_ms     = d.get("latencia_entidades_ms")
+                q.entidades                 = [
                     {"param": p, "label": v[2], "valor": v[0], "score": v[1]}
                     for p, v in entidades.items()
                 ]
@@ -572,6 +601,19 @@ def show_chat():
             st.rerun()
             return
 
+        if q_lower in _KW_SALUDO:
+            st.session_state.messages.append({"role": "user", "content": user_query})
+            st.session_state.messages.append({
+                "role": "assistant",
+                "content": (
+                    "¡Hola! Soy tu asistente de Claro Insurance. "
+                    "Puedo ayudarte con consultas sobre contratos, comisiones y documentos normativos.\n\n"
+                    "Escribe **instrucciones** para ver todo lo que puedes consultar. ¡Quedo atento!"
+                ),
+            })
+            st.rerun()
+            return
+
         if q_lower in _KW_INSTRUCCIONES:
             st.session_state.messages.append({"role": "user", "content": user_query})
             st.session_state.messages.append({
@@ -602,9 +644,21 @@ def show_chat():
 
         with st.status("Analizando tu consulta...", expanded=True) as _status:
             st.write("Normalizando lenguaje natural...")
-            normalized = transformar_consulta_con_llm(user_query)
+            _hist = [
+                {"role": m["role"], "content": m["content"][:200].replace("\n", " ")}
+                for m in st.session_state.messages[-4:]
+            ]
+            _t0 = time.perf_counter()
+            user_query_efectiva = reescribir_consulta(_hist, user_query)
+            if user_query_efectiva != user_query:
+                st.session_state.debug_info["query_reescrita"] = user_query_efectiva
+            normalized = transformar_consulta_con_llm(user_query_efectiva)
+            st.session_state.debug_info["latencia_normalizacion_ms"] = int((time.perf_counter() - _t0) * 1000)
+
             st.write("Detectando flujo de respuesta...")
+            _t1 = time.perf_counter()
             use_case_entry, score = detectar_caso_de_uso(normalized, catalogos)
+            st.session_state.debug_info["latencia_deteccion_ms"] = int((time.perf_counter() - _t1) * 1000)
             _status.update(label="Análisis completado", state="complete", expanded=False)
 
         # Actualizar debug con normalización y detección
@@ -636,8 +690,9 @@ def show_chat():
 
         # Extraer entidades según el tipo de flujo
         entidades: dict = {}
+        _t2 = time.perf_counter()
         if tipo_pregunta == "sql":
-            entidades = extraer_entidades(user_query, pregunta.get("parametros", []), filtro_fijo_key)
+            entidades = extraer_entidades(user_query_efectiva, pregunta.get("parametros", []), filtro_fijo_key)
         elif tipo_pregunta == "multiple":
             catalogo_actual = USE_CASES["options"].get(use_case_entry["catalogo"], {})
             preguntas_map = {p["id"]: p for p in catalogo_actual.get("preguntas", [])}
@@ -648,6 +703,7 @@ def show_chat():
                     for param, val in sub_ents.items():
                         if param not in entidades:
                             entidades[param] = val
+        st.session_state.debug_info["latencia_entidades_ms"] = int((time.perf_counter() - _t2) * 1000)
 
         # Actualizar debug con todo el contexto detectado
         st.session_state.debug_info.update({

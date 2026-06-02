@@ -378,6 +378,14 @@ DOCUMENTS = [
         "metadata": {
             "category": "claro insurance faq"
         }
+    },
+    {
+        "filename": "Guia_Reconciliaciones_Cliente_RAG.pdf",
+        "collection": "reconciliaciones_faq",
+        "chunking": "sliding",
+        "metadata": {
+            "category": "reconciliaciones"
+        }
     }
     ]
 

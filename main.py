@@ -14,7 +14,6 @@ from pathlib import Path
 _LLM_MAX_RETRIES = 3
 _LLM_RETRY_BASE_S = 5  # backoff: 5s, 10s, 20s
 
-
 def _llm_call(model, prompt: str):
     """Llama al modelo LLM con retry/backoff para errores 429 (rate limit)."""
     for attempt in range(1, _LLM_MAX_RETRIES + 1):
@@ -124,6 +123,7 @@ PARAM_TO_FILTRO = {
     "p.Payment_Type__c":     ("payment_type",         "Tipo de Pago",     "AND p.Payment_Type__c = '{v}'",                               0.82),
     # Parámetro de póliza — filtro_key "__policy_number__" activa extracción por regex
     "p.Policy_Number__c": ("__policy_number__",  "Número de Póliza",   "AND p.Policy_Number__c = '{v}'",                       None),
+    "b.Policy_Number__c": ("__policy_number__",  "Número de Póliza",   "AND r.Policy_ID__c = '{v}'",                           None),
     # Parámetros de licencias
     "l.LicenseState__c":  ("license_state",       "Estado de Licencia", "AND l.LicenseState__c = '{v}'",                        0.80),
     "l.LicenseType__c":   ("license_type",        "Tipo de Licencia",   "AND l.LicenseType__c = '{v}'",                         0.80),
@@ -149,6 +149,7 @@ _PALABRAS_VOLVER        = {"volver", "back"}
 _PALABRAS_MENU          = {"nueva sesión","nueva sesion"}
 _PALABRAS_INSTRUCCIONES = {"instrucciones", "help", "ayuda", "guia", "guía"}
 _PALABRAS_ESCALAR       = {"escalar", "escalar a un humano"}
+_PALABRAS_SALUDO        = {"hola", "hola!", "hey", "buenas", "buenas tardes", "buenos días", "buenos dias", "buenas noches"}
 
 
 def _input(prompt: str) -> str:
@@ -165,6 +166,14 @@ def _input(prompt: str) -> str:
     if valor.lower() in _PALABRAS_ESCALAR:
         print()
         print("  Funcionalidad todavía en proceso.")
+        print()
+        return _input(prompt)
+    if valor.lower() in _PALABRAS_SALUDO:
+        print()
+        print("  ¡Hola! Soy tu asistente de Claro Insurance.")
+        print("  Puedo ayudarte con consultas sobre contratos, comisiones y documentos normativos.")
+        print('  Escribe "instrucciones" para ver todo lo que puedes consultar.')
+        print("  ¡Quedo atento!")
         print()
         return _input(prompt)
     return valor
@@ -233,7 +242,8 @@ def _mostrar_instrucciones():
   ══════════════════════════════════════════════════════
 
   CONTRATOS
-    · Cantidad de Contratos Activos y Pendientes
+    · Cantidad y detalle de Contratos Activos, Pendientes e Inactivos
+    · Detalle General de Contratos (Activos + Pendientes combinados)
     · Verificar status del contrato en el sistema  (*)
     · Identificar motivo del retraso en la aprobación  (*)
     · Instructivo Gestión de Contratos ACA
@@ -241,17 +251,27 @@ def _mostrar_instrucciones():
     · Instructivo Gestión de Contratos Life
     · Instructivo Gestión de Contratos Supplementary
     · Licencias
+    · Oferta de Productos disponibles por carrier y estado
+    · Validación para generación de contrato  (*)
 
   PAGOS Y COMISIONES
     · Comisiones Pagadas
     · Comisiones Bloqueadas
     · Detalle Comisiones  (*)
-    · Calendario Ciclo de Pago de Comisiones
-    · Porque no me han pagado mis comisiones
+    · Pre-Liquidación de Comisiones
+    · Detalle de Pre-Liquidación  (*)
+    · Frecuencia de Liquidación por Carrier
+    · Calendario de Pago de Comisiones a Agentes
+    · Estado del Contrato y Agente por Póliza  (*)
+    · Porque no me han pagado mis comisiones  (*)
+    · Detalle de Reconciliaciones por Póliza  (*)
+    · Guía de Reconciliaciones de Comisiones
 
   DOCUMENTOS NORMATIVOS
     · Plazos Estándar de Envío de Contratos
     · Horarios y Roles del Equipo
+    · ARC Off-Exchanges FAQ
+    · Claro Insurance FAQ
 
   (*) Estas consultas requieren al menos un filtro
       obligatorio para ejecutarse (ver tabla de filtros).
@@ -316,19 +336,25 @@ def _mostrar_instrucciones():
   ══════════════════════════════════════════════════════
 
   "Contratos pendientes de Ambetter en Florida"
-  "Cuántos contratos en Blackout tiene la agencia
-   Comfort Insurance con Humana en Texas"
+  "Cuántos contratos activos tengo con Humana"
+  "Detalle de contratos inactivos en Texas"
   "Status del contrato con Humana en Florida"
-  "Por qué está retrasado el contrato del agente
-   NPN 9876543 con Aetna"
+  "Por qué está retrasado el contrato del agente NPN 9876543"
+  "Qué productos ofrece Claro en Georgia"
+  "Puedo generar un contrato con Aetna en Florida"
   "Comisiones pagadas con Humana el mes pasado"
   "Cuánto tengo en comisiones bloqueadas en mayo 2024"
   "Detalle de comisiones póliza H12345678"
-  "Detalle de comisiones tipo Commission de Humana"
-  "Instructivo para contratar con Cigna Supplementary"
+  "Cuánto me van a pagar en la próxima preliquidación"
+  "Estado del contrato del agente para la póliza 67YM83"
+  "Por qué no me han pagado las comisiones de la póliza A9876543"
+  "Reconciliaciones de la póliza 34XG37"
+  "Cómo someter una reconciliación con Cigna"
+  "Frecuencia de liquidación de Molina ACA"
   "Cuándo se pagan las comisiones de este mes"
+  "Instructivo para contratar con Cigna Supplementary"
   "Cuáles son los plazos para enviar contratos"
-  "Horarios y roles del equipo de Claro Insurance"
+  "Qué dice el FAQ de Off-Exchange sobre comisiones"
 
   ══════════════════════════════════════════════════════
   COMANDOS GLOBALES (disponibles en todo momento)
@@ -349,8 +375,8 @@ Tu tarea es leer la consulta de un usuario y extraer ÚNICAMENTE la intención p
 REGLAS ESTRICTAS:
 - Responde SOLO con la frase nominal. Nada más.
 - Elimina completamente: nombres de carriers,lineas de negocios, aseguradoras, agencias, agentes, estados, fechas, NPNs, números de póliza, montos y cualquier otro filtro o entidad específica.
-- No incluyas verbos conjugados, sujetos, ni conectores como "de", "para", "con" seguidos de una entidad.
-- No incluyas agrupaciones ni ordenamientos.
+- No incluyas verbos conjugados, sujetos, ni conectores como "de", "para", "con","por" seguidos de una entidad.
+- No incluyas agrupaciones ni ordenamientos, incluyendo los campos por los que se agrupa (ej. "por tipo de pago", "por carrier", "por estado").
 - Escribe siempre en español.
 
 EJEMPLOS — observa cómo se eliminan todas las entidades y filtros:
@@ -388,6 +414,10 @@ EJEMPLOS — observa cómo se eliminan todas las entidades y filtros:
   Usuario: "Ver el estado de mi licencia en Florida tipo Health"
   Respuesta: Estado de licencias
 
+  Usuario: "Dame las comisiones pagadas el mes pasado agrupada por tipo de pago"
+  Respuesta: Comisiones pagadas
+
+
 Consulta del usuario: "{user_query}" """.strip()
 
 
@@ -401,6 +431,40 @@ def transformar_consulta_con_llm(user_query: str) -> str:
         return normalized if normalized else user_query
     except Exception:
         return user_query
+
+
+_PROMPT_REESCRIBIR = """Eres un asistente de un sistema de seguros (Claro Insurance).
+Tu única tarea es decidir si la nueva consulta del usuario necesita contexto del historial para entenderse.
+
+REGLA:
+- Si la consulta es COMPLETA y tiene sentido por sí sola, o cambia de tema claramente → devuélvela EXACTAMENTE igual, sin ningún cambio.
+- Si la consulta es AMBIGUA, INCOMPLETA o es una extensión del turno anterior (filtro adicional, aclaración, misma temática con nuevo parámetro) → reescríbela como una consulta autónoma y completa incorporando el contexto necesario.
+
+Historial reciente:
+{historial}
+
+Nueva consulta: "{query}"
+
+Responde ÚNICAMENTE con la consulta final. Sin explicaciones ni comillas.""".strip()
+
+
+def reescribir_consulta(historial: list[dict], query: str) -> str:
+    """Reformula la consulta si es una continuación del turno anterior."""
+    if not historial:
+        return query
+    lineas = []
+    for msg in historial:
+        rol = "Usuario" if msg["role"] == "user" else "Asistente"
+        contenido = msg["content"][:200].replace("\n", " ")
+        lineas.append(f'{rol}: "{contenido}"')
+    historial_str = "\n".join(lineas)
+    try:
+        prompt = _PROMPT_REESCRIBIR.format(historial=historial_str, query=query)
+        response = _llm_call(llm_model, prompt)
+        reescrita = response.text.strip().strip('"').split("\n")[0].strip()
+        return reescrita if reescrita else query
+    except Exception:
+        return query
 
 
 def detectar_caso_de_uso(
@@ -898,7 +962,7 @@ def _construir_sql_con_llm(
         "la solicitud específica del usuario, partiendo de la sintaxis base.\n\n"
         "1. SINTAXIS BASE (usa estos JOINs y aliases exactamente):\n"
         f"{sql_base}\n\n"
-        "2. REFERENCIA DE COLUMNAS (usa SIEMPRE estos nombres exactos en SELECT, WHERE y GROUP BY):\n"
+        "2. REFERENCIA DE COLUMNAS DISPONIBLES PARA FILTROS WHERE (usa SIEMPRE estos nombres exactos en WHERE):\n"
         f"{schema_str}\n\n"
         "3. ENTIDADES DETECTADAS (aplica como filtros WHERE adicionales):\n"
         f"{entidades_str}\n"
@@ -907,8 +971,10 @@ def _construir_sql_con_llm(
         f"{error_bloque}"
         "\nREGLAS ESTRICTAS:\n"
         "- Los JOINs de la sintaxis base NO pueden removerse ni modificarse\n"
+        "- Las columnas del SELECT de la sintaxis base NO pueden modificarse ni ampliarse. "
+        "Solo puedes agregar filtros WHERE adicionales con las entidades detectadas\n"
+        "- El GROUP BY de la sintaxis base NO puede modificarse ni eliminarse\n"
         "- Si agregas GROUP BY, el campo de agrupación DEBE estar también en el SELECT\n"
-        "- Si agregas GROUP BY, debes dar el detalle de la tabla\n"
         "- El filtro obligatorio del usuario SIEMPRE debe estar en el WHERE\n"
         "- Usa ÚNICAMENTE los nombres de columna de la sección REFERENCIA DE COLUMNAS\n"
         "- Responde ÚNICAMENTE con el SQL listo para ejecutar en BigQuery\n"
@@ -1047,9 +1113,10 @@ def ejecutar_consulta(
             f"- Si los datos son registros individuales (IDs, contratos, oportunidades): "
             f"NO los enumeres uno por uno. Solo indica cuántos se encontraron "
             f"y ofrece al usuario explorar detalles específicos si lo desea.\n"
+            f"- Tutea siempre al usuario, usa 'tú' en lugar de 'usted'.\n"
             f"- Al final agrega estas dos líneas exactas, en este orden:\n"
-            f"  'Te invito a realizar otra pregunta para seguir explorando.'\n"
-            f"  'Recuerde que si su consulta no fue efectiva, puede escribir \"escalar a un humano\"'.\n"
+            f"  '{pregunta.get('ending_resolution', 'Te invito a realizar otra pregunta para seguir explorando.')}'\n"
+            f"  'Recuerda que si tu consulta no fue efectiva, puedes escribir \"escalar a un humano\"'.\n"
             f"- NO uses cierres formales como 'Atentamente' ni firmas de ningún tipo.\n"
             f"- Responde en español de forma clara y concisa.\n"
             f"{entity_resolution_bloque}"
@@ -1170,11 +1237,12 @@ def ejecutar_rag(pregunta_config: dict, user_query: str, query_log=None) -> None
         f"Basándote ÚNICAMENTE en los siguientes fragmentos de documentos:\n\n"
         f"{contexto_completo}\n\n"
         f"Responde directamente la pregunta en español de forma clara y concisa. "
+        f"Tutea siempre al usuario, usa 'tú' en lugar de 'usted'. "
         f"Si la información no está en los documentos, indícalo. "
         f"NO uses cierres formales como 'Atentamente' ni firmas. "
         f"Al final agrega estas dos líneas exactas, en este orden: "
-        f"'Le invitamos a realizar otra pregunta para seguir explorando.' "
-        f"'Recuerde que si su consulta no fue efectiva, puede escribir \"escalar a un humano\"'."
+        f"'{pregunta_config.get('ending_resolution', 'Te invitamos a realizar otra pregunta para seguir explorando.')}' "
+        f"'Recuerda que si tu consulta no fue efectiva, puedes escribir \"escalar a un humano\"'."
         f"{entity_resolution_bloque}"
     )
     print("RESPUESTA:")
@@ -1276,6 +1344,7 @@ def _sintetizar_respuestas_multiples(
     user_query: str,
     resultados: dict,
     entity_resolution: str = "",
+    cierre: str = "",
 ) -> str:
     """Recibe los resultados de todos los sub-casos y los unifica en una sola respuesta."""
     bloques = []
@@ -1322,10 +1391,11 @@ def _sintetizar_respuestas_multiples(
         f"- Usa la descripción de columnas para interpretar correctamente cada valor de la tabla.\n"
         f"- Presenta los datos de forma cohesiva como si fuera una sola explicación.\n"
         f"- Si alguna consulta no arrojó resultados, menciónalo brevemente.\n"
+        f"- Tutea siempre al usuario, usa 'tú' en lugar de 'usted'.\n"
         f"- NO uses cierres formales como 'Atentamente' ni firmas de ningún tipo.\n"
         f"- Al final agrega estas dos líneas exactas, en este orden:\n"
-        f"  'Le invitamos a realizar otra pregunta para seguir explorando.'\n"
-        f"  'Recuerde que si su consulta no fue efectiva, puede escribir \"escalar a un humano\"'.\n"
+        f"  '{cierre or 'Te invitamos a realizar otra pregunta para seguir explorando.'}'\n"
+        f"  'Recuerda que si tu consulta no fue efectiva, puedes escribir \"escalar a un humano\"'.\n"
     )
     try:
         response = _llm_call(llm_model, prompt)
@@ -1414,6 +1484,7 @@ def ejecutar_multiple(
         user_query,
         resultados,
         entity_resolution=pregunta_multiple.get("entity_resolution", ""),
+        cierre=pregunta_multiple.get("cierre", ""),
     )
     print()
     print("RESULTADO:")
@@ -1428,6 +1499,7 @@ def ciclo_consultas(
     filtro_fijo_key: str | None,
 ):
     _next_query: str | None = None
+    _historial_reciente: list[dict] = []
     while True:
         if _next_query is not None:
             user_query = _next_query
@@ -1448,8 +1520,12 @@ def ciclo_consultas(
         print()
         print("  Analizando su consulta...")
 
+        user_query_efectiva = reescribir_consulta(_historial_reciente, user_query)
+        if user_query_efectiva != user_query:
+            print(f"  #--DEBUG Consulta reescrita: {user_query_efectiva}")
+
         _t = time.perf_counter()
-        normalized = transformar_consulta_con_llm(user_query)
+        normalized = transformar_consulta_con_llm(user_query_efectiva)
         q.latencia_normalizacion_ms = int((time.perf_counter() - _t) * 1000)
         q.query_normalizado = normalized
 
@@ -1480,6 +1556,9 @@ def ciclo_consultas(
         pregunta    = use_case_entry["pregunta"]
         q.caso_nombre   = nombre_caso
         q.caso_catalogo = use_case_entry.get("catalogo")
+
+        _historial_reciente.append({"role": "user", "content": user_query_efectiva})
+        _historial_reciente = _historial_reciente[-4:]
 
         # Pre-detectar entidades del query original (solo para SQL individual)
         tipo_pregunta = pregunta.get("tipo")
@@ -1656,7 +1735,6 @@ def main():
         print()
         print("Sesión finalizada. ¡Hasta pronto!")
         sys.exit(0)
-
 
 if __name__ == "__main__":
     main()
