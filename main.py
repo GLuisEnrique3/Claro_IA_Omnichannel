@@ -124,6 +124,11 @@ PARAM_TO_FILTRO = {
     # Parámetro de póliza — filtro_key "__policy_number__" activa extracción por regex
     "p.Policy_Number__c": ("__policy_number__",  "Número de Póliza",   "AND p.Policy_Number__c = '{v}'",                       None),
     "b.Policy_Number__c": ("__policy_number__",  "Número de Póliza",   "AND r.Policy_ID__c = '{v}'",                           None),
+    # Parámetros de comisiones en avance
+    "p.Agent_Name__c":           ("agent_name",        "Nombre del Agente",           "AND p.Agent_Name__c = '{v}'",                        0.90),
+    "p.CommissionsInAdvance__c": ("__cia_id__",         "ID de Comisión en Avance",    "AND p.CommissionsInAdvance__c = '{v}'",               None),
+    "p.Pre_Approved__c":         ("pre_approved",       "Estado de Aprobación",        "AND p.Pre_Approved__c = '{v}'",                      0.85),
+    "p.ProcessingStatus__c":     ("processing_status",  "Estado de Procesamiento",     "AND p.ProcessingStatus__c = '{v}'",                  0.85),
     # Parámetros de licencias
     "l.LicenseState__c":  ("license_state",       "Estado de Licencia", "AND l.LicenseState__c = '{v}'",                        0.80),
     "l.LicenseType__c":   ("license_type",        "Tipo de Licencia",   "AND l.LicenseType__c = '{v}'",                         0.80),
@@ -369,54 +374,110 @@ def _mostrar_instrucciones():
 
 
 # ── Ruteo por intención natural ───────────────────────────────────────────────
-_PROMPT_NORMALIZAR_INTENT = """Eres un asistente de seguros especializado en el sistema Claro Insurance.
-Tu tarea es leer la consulta de un usuario y extraer ÚNICAMENTE la intención principal como una frase nominal corta (máximo 8 palabras).
+_PROMPT_NORMALIZAR_INTENT = """Eres un asistente de seguros (Claro Insurance).
+Tu única tarea es simplificar la consulta eliminando todas las entidades específicas y
+conservando únicamente la intención y las palabras de acción clave.
 
-REGLAS ESTRICTAS:
-- Responde SOLO con la frase nominal. Nada más.
-- Elimina completamente: nombres de carriers,lineas de negocios, aseguradoras, agencias, agentes, estados, fechas, NPNs, números de póliza, montos y cualquier otro filtro o entidad específica.
-- No incluyas verbos conjugados, sujetos, ni conectores como "de", "para", "con","por" seguidos de una entidad.
-- No incluyas agrupaciones ni ordenamientos, incluyendo los campos por los que se agrupa (ej. "por tipo de pago", "por carrier", "por estado").
-- Escribe siempre en español.
+ELIMINA siempre:
+- Nombres de carriers / aseguradoras (Humana, Ambetter, Oscar, Molina, Aetna, Simply, Cigna, United, Friday, HealthSun, etc.)
+- Nombres de estados (Florida, Texas, Georgia, etc.)
+- Nombres de agentes, agencias o ejecutivos
+- Números NPN, IDs de oportunidad, números de póliza
+- Fechas, meses, años, períodos (el mes pasado, mayo 2024, este mes, etc.)
+- Montos o porcentajes
+- Lineas de Negocios
 
-EJEMPLOS — observa cómo se eliminan todas las entidades y filtros:
+CONSERVA siempre:
+- La palabra de acción: cuántos, detalle, estado, instructivo, pasos, cuándo, frecuencia,
+  calendario, por qué, reconciliación, pre-liquidación, licencias, oportunidades, etc.
+- El objeto: contratos, comisiones, pagos, licencias, plazos, productos, etc.
+- El calificador si importa: activos, pendientes, inactivos, bloqueadas, pagadas, etc.
 
-  Usuario: "Detalle de mis contratos activos en el carrier Humana de la agencia X en Florida"
-  Respuesta: Detalle de contratos activos
 
-  Usuario: "Cuántos contratos pendientes tiene la agencia Comfort Insurance con Ambetter en Texas"
-  Respuesta: Cantidad de contratos pendientes
+REGLAS:
+- Responde SOLO con la frase simplificada. Sin puntuación extra ni explicaciones.
+- Máximo 8 palabras.
+- Escribe en español.
 
-  Usuario: "Cuánto me pagaron de comisiones el mes pasado con Humana en Medicare Advantage"
-  Respuesta: Comisiones pagadas
-
-  Usuario: "Por qué no me han pagado mis comisiones este mes con Aetna"
-  Respuesta: Razón de falta de pago de comisiones
-
-  Usuario: "Cuándo se pagan las comisiones de Oscar Health en Florida"
-  Respuesta: Calendario de pago de comisiones
-
-  Usuario: "Necesito ver el instructivo de contratos ACA con Aetna en Georgia"
-  Respuesta: Instructivo de gestión de contratos ACA
-
-  Usuario: "Dame el resumen de mis contratos activos y pendientes"
-  Respuesta: Resumen de contratos
+EJEMPLOS:
 
   Usuario: "Cuántos contratos activos tengo con Humana en Florida"
-  Respuesta: Cantidad de contratos activos
+  Respuesta: cuántos contratos activos
 
-  Usuario: "Dame el detalle completo de mis contratos activos y pendientes"
-  Respuesta: Detalle general de contratos
+  Usuario: "Detalle de mis contratos activos con Humana en Florida"
+  Respuesta: detalle de contratos activos
 
-  Usuario: "Quiero ver el detalle de mis contratos activos con Ambetter"
-  Respuesta: Detalle de contratos activos
+  Usuario: "Cuántos contratos pendientes tiene mi agencia con Ambetter en Texas"
+  Respuesta: cuántos contratos pendientes
+
+  Usuario: "Detalle de contratos inactivos con Molina en Georgia"
+  Respuesta: detalle de contratos inactivos
+
+  Usuario: "Dame el resumen de mis contratos activos y pendientes"
+  Respuesta: resumen de contratos activos y pendientes
+
+  Usuario: "Cuánto me pagaron de comisiones el mes pasado con Humana en Medicare"
+  Respuesta: comisiones pagadas
+
+  Usuario: "Comisiones bloqueadas con Aetna en Florida"
+  Respuesta: comisiones bloqueadas
+
+  Usuario: "Detalle de comisiones de la póliza H12345678"
+  Respuesta: detalle de comisiones
+
+  Usuario: "Cuánto me van a pagar en la próxima preliquidación con Oscar"
+  Respuesta: pre-liquidación de comisiones
+
+  Usuario: "Por qué no me han pagado mis comisiones con Aetna este mes"
+  Respuesta: por qué no me han pagado mis comisiones
+
+  Usuario: "Cuándo se pagan las comisiones de Oscar Health en Florida"
+  Respuesta: cuándo se pagan las comisiones
+
+  Usuario: "Cuál es la frecuencia de liquidación por carrier"
+  Respuesta: frecuencia de liquidación por carrier
+
+  Usuario: "Necesito ver el instructivo de contratos ACA con Aetna en Georgia"
+  Respuesta: instructivo contratos ACA
+
+  Usuario: "Cuáles son los pasos para activar un contrato con Oscar"
+  Respuesta: pasos para activar un contrato ACA
+
+  Usuario: "Cómo activo un contrato con Humana Medicare"
+  Respuesta: instructivo contratos Medicare
+
+  Usuario: "Dame el resumen para contratar con Cigna Supplementary"
+  Respuesta: instructivo contratos Supplementary
+
+  Usuario: "Cual es el status de mi contrato con Gold Kidney Health Plan en Medicare?"
+  Respuesta: estado de mis contratos
+
+  Usuario: "Mi contrato de Doctors en Medicare ya fue aprobado o está pendiente de revisión?"
+  Respuesta: contrato aprobado o pendiente de revision
+
+  Usuario: "El contrato de Medicare en Wellcare para el NPN 18966008 tuvo alguna inactivacion?"
+  Respuesta: detalle contratos inactivos
+
+  Usuario: "Hay algun problema tecnico en la gestion del contrato para el NPN 20763612 en Medicare del carrier Healthsun en Florida?"
+  Respuesta: hay problema tecnico en el contrato
+
+  Usuario: "Cuándo se activó mi contrato con Medicare en Simply para el NPN 12345 en Florida"
+  Respuesta: cuándo se activó el contrato
+
+  Usuario: "En qué fecha fue aprobado mi contrato con Humana ACA"
+  Respuesta: cuándo fue aprobado el contrato
 
   Usuario: "Ver el estado de mi licencia en Florida tipo Health"
-  Respuesta: Estado de licencias
+  Respuesta: estado de licencias
 
-  Usuario: "Dame las comisiones pagadas el mes pasado agrupada por tipo de pago"
-  Respuesta: Comisiones pagadas
+  Usuario: "Qué productos ofrece Claro en Georgia"
+  Respuesta: oferta de productos
 
+  Usuario: "Cuáles son los plazos para enviar contratos"
+  Respuesta: plazos estándar de envío de contratos
+
+  Usuario: "Qué oportunidades de contratación tengo disponibles con Oscar en Florida"
+  Respuesta: oportunidades de contratación por carrier
 
 Consulta del usuario: "{user_query}" """.strip()
 
@@ -436,9 +497,12 @@ def transformar_consulta_con_llm(user_query: str) -> str:
 _PROMPT_REESCRIBIR = """Eres un asistente de un sistema de seguros (Claro Insurance).
 Tu única tarea es decidir si la nueva consulta del usuario necesita contexto del historial para entenderse.
 
-REGLA:
-- Si la consulta es COMPLETA y tiene sentido por sí sola, o cambia de tema claramente → devuélvela EXACTAMENTE igual, sin ningún cambio.
-- Si la consulta es AMBIGUA, INCOMPLETA o es una extensión del turno anterior (filtro adicional, aclaración, misma temática con nuevo parámetro) → reescríbela como una consulta autónoma y completa incorporando el contexto necesario.
+REGLAS (en orden de prioridad):
+1. Si la consulta menciona explícitamente "por carrier", "todos los carriers", "por estado", "todos los agentes" u otra expresión de alcance general → devuélvela EXACTAMENTE igual, sin ningún cambio. Estas expresiones indican que el usuario NO quiere filtrar por entidades del historial.
+2. Si la consulta es COMPLETA y tiene sentido por sí sola, o claramente cambia de tema → devuélvela EXACTAMENTE igual, sin ningún cambio.
+3. Si la consulta es AMBIGUA, INCOMPLETA o es una extensión directa del turno anterior (añade un filtro, aclara algo, pregunta sobre lo mismo con un nuevo parámetro) → reescríbela incorporando el contexto mínimo necesario del historial.
+
+IMPORTANTE: Ante la duda, NO reescribas. Es mejor devolver la consulta original que añadir contexto incorrecto.
 
 Historial reciente:
 {historial}
@@ -1181,7 +1245,7 @@ def ejecutar_rag(pregunta_config: dict, user_query: str, query_log=None) -> None
     try:
         results = collection.query(
             query_embeddings=[query_embedding],
-            n_results=3,
+            n_results=5,
             where=where_filter,
             include=["documents", "metadatas", "distances"],
         )
@@ -1520,12 +1584,22 @@ def ciclo_consultas(
         print()
         print("  Analizando su consulta...")
 
-        user_query_efectiva = reescribir_consulta(_historial_reciente, user_query)
+        # Solo pasa la última entrada al rewriter para evitar que el LLM elija
+        # una query más antigua (y semánticamente "más relevante") en vez de la inmediata anterior.
+        # Funciona porque las queries reescritas ya acumulan contexto acumulativo.
+        # Queries de más de 7 palabras son completas por sí solas — no necesitan reescritura.
+        if len(user_query.split()) > 7:
+            user_query_efectiva = user_query
+        else:
+            user_query_efectiva = reescribir_consulta(_historial_reciente[-1:], user_query)
         if user_query_efectiva != user_query:
             print(f"  #--DEBUG Consulta reescrita: {user_query_efectiva}")
 
         _t = time.perf_counter()
-        normalized = transformar_consulta_con_llm(user_query_efectiva)
+        # La detección de intención usa siempre la query ORIGINAL para evitar que el
+        # historial cambie el tipo de consulta (ej. de "detalle contratos" a "instructivo").
+        # La query reescrita solo se usa para entidades en follow-ups ambiguos.
+        normalized = transformar_consulta_con_llm(user_query)
         q.latencia_normalizacion_ms = int((time.perf_counter() - _t) * 1000)
         q.query_normalizado = normalized
 
@@ -1560,13 +1634,15 @@ def ciclo_consultas(
         _historial_reciente.append({"role": "user", "content": user_query_efectiva})
         _historial_reciente = _historial_reciente[-4:]
 
-        # Pre-detectar entidades del query original (solo para SQL individual)
+        # Pre-detectar entidades (solo para SQL individual).
+        # Usa la query reescrita para capturar entidades de follow-ups ambiguos
+        # (ej. "Y los de Florida?" → reescrita añade el carrier del turno anterior).
         tipo_pregunta = pregunta.get("tipo")
         entidades_previas = {}
         if tipo_pregunta == "sql":
             _t = time.perf_counter()
             entidades_previas = extraer_entidades(
-                user_query, pregunta.get("parametros", []), filtro_fijo_key
+                user_query_efectiva, pregunta.get("parametros", []), filtro_fijo_key
             )
             q.latencia_entidades_ms = int((time.perf_counter() - _t) * 1000)
             q.entidades = [
