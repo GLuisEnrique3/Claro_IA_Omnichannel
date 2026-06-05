@@ -386,6 +386,7 @@ ELIMINA siempre:
 - Fechas, meses, años, períodos (el mes pasado, mayo 2024, este mes, etc.)
 - Montos o porcentajes
 - Lineas de Negocios
+- Conectores de entidad (con, de, en, para, con la agencia, del NPN, etc.)
 
 CONSERVA siempre:
 - La palabra de acción: cuántos, detalle, estado, instructivo, pasos, cuándo, frecuencia,
@@ -477,7 +478,7 @@ EJEMPLOS:
   Respuesta: plazos estándar de envío de contratos
 
   Usuario: "Qué oportunidades de contratación tengo disponibles con Oscar en Florida"
-  Respuesta: oportunidades de contratación por carrier
+  Respuesta: oportunidades de contratación
 
 Consulta del usuario: "{user_query}" """.strip()
 
@@ -1109,6 +1110,7 @@ def ejecutar_consulta(
 
         if query_log:
             query_log.latencia_sql_ms = int((time.perf_counter() - _t_sql) * 1000)
+            query_log.sql_generada = sql_final
 
         # ── Capa de seguridad: solo SELECT permitido ──────────────────────────
         _SQL_FORBIDDEN = re.compile(
@@ -1191,6 +1193,7 @@ def ejecutar_consulta(
             response = _llm_call(llm_model, prompt)
             if query_log:
                 query_log.latencia_respuesta_ms = int((time.perf_counter() - _t_resp) * 1000)
+                query_log.llm_respuesta = response.text
             return response.text
         except Exception as exc:
             return f"❌ Error al generar la respuesta con el modelo:\n{exc}"
@@ -1316,6 +1319,7 @@ def ejecutar_rag(pregunta_config: dict, user_query: str, query_log=None) -> None
         response = _llm_call(llm_model, prompt)
         if query_log:
             query_log.latencia_respuesta_ms = int((time.perf_counter() - _t_resp) * 1000)
+            query_log.llm_respuesta = response.text
         print(response.text.strip())
     except Exception as exc:
         print(f"❌ Error al generar respuesta: {exc}")
@@ -1596,10 +1600,11 @@ def ciclo_consultas(
             print(f"  #--DEBUG Consulta reescrita: {user_query_efectiva}")
 
         _t = time.perf_counter()
-        # La detección de intención usa siempre la query ORIGINAL para evitar que el
-        # historial cambie el tipo de consulta (ej. de "detalle contratos" a "instructivo").
-        # La query reescrita solo se usa para entidades en follow-ups ambiguos.
-        normalized = transformar_consulta_con_llm(user_query)
+        # Queries largas (>7 palabras): user_query_efectiva == user_query (el rewrite se saltó),
+        # por lo que no hay riesgo de contaminación del historial.
+        # Queries cortas (≤7 palabras): user_query_efectiva lleva el contexto del rewrite
+        # y es la que tiene sentido normalizar.
+        normalized = transformar_consulta_con_llm(user_query_efectiva)
         q.latencia_normalizacion_ms = int((time.perf_counter() - _t) * 1000)
         q.query_normalizado = normalized
 

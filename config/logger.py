@@ -34,6 +34,8 @@ class QueryLog:
         self.bq_filas: int | None = None
         self.bq_exitoso: bool | None = None
         self.bq_error: str | None = None
+        self.sql_generada: str | None = None
+        self.llm_respuesta: str | None = None
         self.rag_coleccion: str | None = None
         self.rag_documentos: int | None = None
         self.rag_carrier: str | None = None
@@ -75,6 +77,8 @@ class QueryLog:
             "bq_filas": self.bq_filas,
             "bq_exitoso": self.bq_exitoso,
             "bq_error": self.bq_error,
+            "sql_generada": self.sql_generada,
+            "llm_respuesta": self.llm_respuesta,
             "rag_coleccion": self.rag_coleccion,
             "rag_documentos": self.rag_documentos,
             "rag_carrier": self.rag_carrier,

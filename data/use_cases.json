@@ -635,7 +635,8 @@
             "Ver cuánto dinero recibí en comisiones",
             "Necesito el resumen de pagos de comisiones",
             "Cuántas membresías pagadas tuve en el último ciclo",
-            "Comisiones pagadas por tipo"
+            "Comisiones pagadas por tipo",
+            "qué pagos he recibido este mes"
           ],
           "sql": "SELECT COALESCE(SUM(CASE WHEN p.Payment_Type__c NOT IN ('Override','Bonus') THEN SAFE_CAST(p.Members_Paid__c AS INT64) ELSE 0 END ), 0) AS Payment_Memberships, SUM(SAFE_CAST(p.Net_Payment__c AS FLOAT64)) AS Net_Payment,SUM(CASE WHEN SAFE_CAST(p.Net_Payment__c AS FLOAT64) > 0 THEN SAFE_CAST(p.Net_Payment__c AS FLOAT64) ELSE 0 END) AS Payment,SUM(CASE WHEN SAFE_CAST(p.Net_Payment__c AS FLOAT64) < 0 THEN SAFE_CAST(p.Net_Payment__c AS FLOAT64) ELSE 0 END) AS Debit,SUM(SAFE_CAST(p.Members_Paid__c AS INT64)) AS General_Members FROM `claroinsurance-dataplatform.salesforce_claro.payment` p LEFT JOIN `claroinsurance-dataplatform.claro_bi.dim_cslb` o ON o.Id = p.Carrier_State_line_of_Business__c LEFT JOIN `claroinsurance-dataplatform.claro_bi.dim_contact` c ON c.Id = p.Contact_Payee__c LEFT JOIN `claroinsurance-dataplatform.claro_bi.dim_account_2` a ON a.Id = c.AccountId WHERE p.Internal_Company_lookup__c = 'a081G00000C9sU8QAJ'AND (p.Payment_Status__c = 'Paid' OR p.Payment_Status__c = 'Paid by carrier' OR p.Payment_Status__c = 'Pending') {dynamic_filters} ",
           "parametros": [
@@ -650,7 +651,7 @@
             "p.Commission_Month__c",
             "p.Payment_Type__c","p.Payment_Status__c"
           ],
-          "entity_resolution": "Payment_Memberships hace referencia a los miembros pagados, aqui solo se contemplan pagos por Payment Type Comission, El Net Payment es el monto en dolares pagado al agente, puede ser positivo (Payment) o negativo (Debit), y General_Members es la membresía general considerada en los pagos de Net Payment. Cuando el usuario quiera saber sus comisiones, le referimos el campo de Net Payment y Payment Memberships (le hacemos referencia que solo contemplan los payment type commision),Payment y Debt. El campo Pay on Date se trabaja como DATE_TRUNC(DATE(p.Pay_on_Date__c),MONTH)",
+          "entity_resolution": "FORMATO OBLIGATORIO: responde en párrafos cortos, NO uses listas ni bullets. Genera un resumen ejecutivo con esta terminologia Payment_Memberships hace referencia a los miembros pagados, aqui solo se contemplan pagos por Payment Type Comission, El Net Payment es el monto en dolares pagado al agente, puede ser positivo (Payment) o negativo (Debit), y General_Members es la membresía general considerada en los pagos de Net Payment. Cuando el usuario quiera saber sus comisiones, le referimos el campo de Net Payment y Payment Memberships (le hacemos referencia que solo contemplan los payment type commision),Payment y Debt. El campo Pay on Date se trabaja como DATE_TRUNC(DATE(p.Pay_on_Date__c),MONTH)",
           "ending_resolution": "Si deseas ver el desglose por carrier, período o tipo de pago, puedo generarlo ahora mismo. Si la respuesta no es correcta o no cubre tu necesidad, puedes escalar tu consulta a un humano.",
           "descripciones": {
             "c.NPN__c": "Número de productor nacional del agente (NPN).",
@@ -700,9 +701,10 @@
             "p.Pay_on_Date__c",
             "p.Policy_Number__c",
             "p.Commission_Month__c",
-            "p.Payment_Type__c","p.Payment_Status__c"
+            "p.Payment_Type__c",
+            "p.Payment_Status__c"
           ],
-          "entity_resolution": "Payment_Memberships hace referencia a los miembros no pagados o pendientes, aqui solo se contemplan pagos por Payment Type Comission, El Net Payment es el monto bloqueado o no pagado al agente, puede ser positivo (Payment) o negativo (Debit), y General_Members es la membresía general considerada en los pagos bloqueados de Net Payment. Cuando el usuario quiera saber sus comisiones bloqueadas, le referimos el campo de Net Payment y Payment Memberships. Las razones pueden ser: On-Hold, cuando no hay asignación clara del pago sin identificar destinatario aplicable sobre la comisión); y Not Paid, cuando el Contact Payee está inactivo, el contracting falló, el internal agent no coincide con el Contact Pay, o el internal agent está suspendido por la aseguradora (Agent_status: Inactive, Contracting Failed, Suspended by Carrier), le invitamos a escalar con un humano si desea un seguimeinto más personalizado. ",
+          "entity_resolution": "FORMATO OBLIGATORIO: responde en párrafos cortos, NO uses listas ni bullets. Genera un resumen ejecutivo con esta terminologia Payment_Memberships hace referencia a los miembros pagados bloqueados, aqui solo se contemplan pagos por Payment Type Comission, El Net Payment es el monto en dolares bloqueado pagado al agente, puede ser positivo (Payment) o negativo (Debit), y General_Members es la membresía general considerada en los bloqueos de pagos de Net Payment. Cuando el usuario quiera saber sus comisiones, le referimos el campo de Net Payment y Payment Memberships (le hacemos referencia que solo contemplan los payment type commision),Payment y Debt. El campo Pay on Date se trabaja como DATE_TRUNC(DATE(p.Pay_on_Date__c),MONTH)",
           "ending_resolution": "Si deseas consultar una comisión bloqueada específica, puedo hacerlo de inmediato. Si la respuesta no resuelve su caso, puedes escalar tu consulta a un humano para seguimiento personalizado.",
           "descripciones": {
             "c.NPN__c": "Número de productor nacional del agente (NPN).",
@@ -812,6 +814,7 @@
           "tipo": "rag",
           "semantic_examples": [
           "Frecuencia Pago de Comisiones",
+          "¿Cuándo es el próximo día de pago?",
           "Cuándo se paga a los agentes sus comisiones",
           "Fecha de pago de comisiones a agentes",
           "Cuándo recibo mi pago de comisiones",
@@ -851,7 +854,8 @@
           "Fechas de pago de comisiones segundo trimestre 2026",
           "Cuándo son los pagos de comisiones tercer trimestre",
           "Fechas de pago a agentes cuarto trimestre 2026",
-          "Calendario completo de pagos de comisiones 2026"
+          "Calendario completo de pagos de comisiones 2026",
+          "cuándo es el próximo día de pago"
           ],
           "ending_resolution": "Si deseas conocer las fechas de pago de un mes específico, puedo consultarlo de inmediato. Si la información no cubre tu necesidad, puedes escalar tu consulta a un humano.",
           "coleccion_chroma": "calendario_comisiones",
@@ -930,6 +934,8 @@
           "tipo": "sql",
           "semantic_examples": [
             "Pre-Liquidación de Comisiones",
+            "próximo pago de comisiones",
+            "preliquidado de comisiones por fecha",
             "Comisiones preliquidadas",
             "¿Puedo ver un preliquidado de mis comisiones antes del pago?",
             "Preliquidación de comisiones",
@@ -1156,7 +1162,7 @@
           "La comisión se la pagaron a otro agente, qué hago",
           "Necesito cambiar el agente asignado para el pago"
           ],
-          "coleccion_chroma": "reconciliaciones",
+          "coleccion_chroma": "reconciliaciones_faq",
           "embedding_model": "all-MiniLM-L6-v2",
           "entity_resolution": "Responde basándote exclusivamente en la Guía de Reconciliaciones de Comisiones de Claro Insurance. Aplica estas reglas según lo que pregunte el usuario: (1) ELEGIBILIDAD: si pregunta si puede o cuándo someter una reconciliación, guíalo por los 6 criterios: falta un pago, póliza bien procesada y asignada al NPN correcto, póliza vigente y al día en primas, póliza sin riesgo ni Binder payment ni Late Payment, póliza visible y elegible en el portal del carrier, tiempo mínimo de espera cumplido según el carrier. Si algún criterio falla, el reclamo será rechazado. (2) PROCESO Y CANALES: la ruta en ARC es Payments → Reconciliation report → botón New Reconciliation. Existen 3 canales: Carga individual (una póliza visible en su libro), Carga masiva Auto Fill (varias pólizas visibles en el libro), Carga masiva Without Fill (pólizas no visibles en el libro pero con número de póliza o marketplace ID). (3) ESTADOS: Waiting on carrier response = escalada, depende del carrier; Belongs to another agent = comisión es de otro AOR, no procede; Incomplete information = información errónea o incompleta, debe corregir y volver a someter; Duplicate request = misma póliza, mes y concepto ya existe; Validated - Scheduled for payment = procede y se paga en el próximo ciclo; Already paid = ya fue pagada; Policy not yet effective = la fecha de efectividad de la póliza es posterior al mes reclamado; Denied/Rejected by carrier = el carrier la negó; Commission on hold = póliza reportada como Late Payment; Accepted - Carrier Internal Process = carrier aceptó y se compromete a pagar. (4) PLAZOS: plazo general 6 meses, mayoría de carriers hasta 1 año, Ambetter solo 90 días. Tiempos mínimos de espera: Ambetter 30 días, Florida Blue 90 días, UHC 60 días, Aetna 60 días, Cigna 60 días, Molina 60 días, Oscar 60 días, BCBS 60 días. (5) REQUISITOS POR CARRIER: si el usuario pregunta por un carrier específico, detalla sus campos mínimos exactos según la guía. Oscar requiere mínimo 10 miembros activos. UHC y BCBS solo aceptan el número de póliza del carrier; Ambetter no acepta números de HealthSherpa. (6) CATEGORÍAS: No payment (missing policies), Incomplete payment (missing members), Bonus, Override, Wrong payment (rate). (7) AJUSTES: corte el día 17 de cada mes; ajustes antes del 17 se pagan en el ciclo inmediato, después del 17 en el siguiente mes. En el statement aparecen como 'Ajuste por reconciliación [Id]'. (8) DESCUENTOS CRUZADOS: si tiene saldo negativo en una filial, Claro puede descontar hasta un 40% de una liquidación positiva en otra filial. (9) Si no procede reconciliación y el caso involucra cambio de agente asignado, indicar que debe hacerse por solicitud de Book of Business, no por reconciliación.",
           "ending_resolution": "Si deseas revisar los requisitos de un carrier específico o el significado de algún estado, puedo consultarlo ahora. Si tu situación no se resuelve con la guía, puedes escalar tu consulta a un humano."
@@ -1368,6 +1374,7 @@
             "CLARO INSURANCE FAQ",
             "¿Qué es Claro Insurance?",
             "Cómo funciona Claro Insurance",
+            "instructivo Claro Insurance",
             "Qué hace una FMO",
             "Claro Insurance como partner estratégico",
             "Beneficios de trabajar con Claro",

@@ -1,1 +1,3 @@
-invalid type: string "Se puede visualizar directamente desde la plataforma. [IMAGEN]\nCampo | Valor\n--- | ---\nRecord Type | Medicare\nContracts Name | CO#10143\nCarrier State line of Business | WellCare Florida\nCommission Type | Advance\nLine of Business | Medicare\nStatus | Active\nContact | Doriluz Pina\nState | FL\nContract Approval Date | 10/20/2022\nAgent Writing Number | 18979017", expect
+* **CREATE CASE:** Confirma la creación del nuevo caso de onboarding con la información ingresada. El onboarding link será enviado al correo del agente. Diríjase a la opp y debe seleccionar el stage "In progress
+- Action Needed". Al finalizar el proceso en el portal de Wellcare, se debe solicitar el contrato a través del portal de carepoint,
+ivel de ventas del nuevo miembro. Seleccionado \"��
