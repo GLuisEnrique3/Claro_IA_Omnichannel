@@ -21,9 +21,6 @@ data/*.pkl
 data/*.xlsx
 data/~$*
 
-# PDFs
-pdf/
-
 # Notes
 notes/
 

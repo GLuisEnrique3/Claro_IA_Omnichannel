@@ -152,7 +152,7 @@
             "que falta para completar el contrato"
           ],
           "sql": "SELECT o.Carrier,o.State,o.Line_Of_Business,s.StageName,s.Sub_stage,op.Internal_Notes__c,COUNT(Distinct p.Id) as Opp_Open FROM `claroinsurance-dataplatform.claro_bi.vw_opportunity` p LEFT JOIN `claroinsurance-dataplatform.claro_bi.dim_opp_stage` s ON s.key_stage = p.key_stage LEFT JOIN `claroinsurance-dataplatform.claro_bi.dim_cslb` o ON o.Id = p.CarrierStateLineOfBusiness_c LEFT JOIN `claroinsurance-dataplatform.salesforce_claro.contact` c ON c.Id = p.Contact__c LEFT JOIN `claroinsurance-dataplatform.claro_bi.dim_account_2` a ON a.Id = c.AccountId  LEFT JOIN `claroinsurance-dataplatform.salesforce_claro.account_executives` ae on c.AE__c = ae.Id LEFT JOIN `claroinsurance-dataplatform.salesforce_claro.opportunity` op ON op.Id = p.Id WHERE a.Name_Agencies != 'Agency Test' AND a.Name_Agencies IS NOT NULL AND s.StageName IN ('Blackout','Carrier Confirmation','Carrier link to be sent','In Progress - Action Needed','Missing Agent Information','Missing Certification','On hold','Pending Release','Started Contracting') {dynamic_filters} GROUP BY o.Carrier,o.State,o.Line_Of_Business,s.StageNames,Sub_stage,op.Internal_Notes__c",
-          "entity_resolution": "FORMATO OBLIGATORIO: responde en párrafos cortos, NO uses listas ni bullets. Genera un resumen ejecutivo que indique: cuántos contratos pendientes hay en total, agrupados por carrier, estado y etapa. Si hay notas internas relevantes, menciónalas de forma resumida al final como contexto adicional. No enumeres cada contrato uno por uno.",
+          "entity_resolution": "FORMATO OBLIGATORIO: responde en párrafos cortos, NO uses listas ni bullets. Genera un resumen ejecutivo que indique: cuántos contratos pendientes hay en total, agrupados por carrier, estado y etapa, NPN involucrados tal caso existan. Si hay notas internas relevantes, menciónalas de forma resumida al final como contexto adicional. No enumeres cada contrato uno por uno.",
           "ending_resolution": "Si necesitas gestionar algún contrato pendiente o conocer los próximos pasos, puedo asistirte de inmediato. Si la respuesta no cubre tu situación, puedes escalar tu consulta a un humano.",
           "parametros": [
             "c.NPN__c",
@@ -235,7 +235,7 @@
             "contrato con inactivacion"
           ],
           "sql": "SELECT o.Carrier,o.State,o.Line_Of_Business,COUNT(*) FROM claroinsurance-dataplatform.claro_bi.vw_agent_contracts_inactive vw LEFT JOIN `claroinsurance-dataplatform.claro_bi.dim_cslb` o ON o.Id = vw.Carrier_State_line_of_Business__c  LEFT JOIN claroinsurance-dataplatform.claro_bi.dim_contact c ON c.Id = vw.Contracted_Agent__c  LEFT JOIN claroinsurance-dataplatform.claro_bi.dim_account_2 a ON a.Id = c.AccountId  WHERE o.Carrier NOT IN ('All Insurance','Insurance XL') {dynamic_filters}  GROUP BY o.Carrier,o.State,o.Line_Of_Business",
-          "entity_resolution": "Debes dar el resultado de la query como respuesta, no agregues más columnas a la sql, solo hazlo si el usuario lo solicita explícitamente. Responde basado en Carrier, State y Line of Business",
+          "entity_resolution": "Debes dar el resultado de la query como respuesta, no agregues más columnas a la sql, solo hazlo si el usuario lo solicita explícitamente. Responde basado en Carrier, State y Line of Business. Todos los resultados son inactivos.",
           "ending_resolution": "Si necesitas revisar otro carrier o período específico, puedo consultarlo de inmediato. Si la respuesta no cubre tu necesidad, puedes escalar tu consulta a un humano.",
           "parametros": [
             "c.NPN__c",
@@ -283,7 +283,7 @@
             "contrato aprobado o pendiente de revision",
             "el contrato fue aprobado o sigue pendiente"
           ],
-          "entity_resolution": "Tienes dos fuentes de datos: (1) Detalle de Contratos Activos agrupado por Carrier/State/LOB, y (2) Detalle de Contratos Pendientes agrupado por Carrier/State/LOB y Stage. Presenta ambos resultados de forma integrada: primero el desglose de activos por carrier, luego el desglose de pendientes con su etapa. Incluye un breve resumen ejecutivo al final.",
+          "entity_resolution": "FORMATO OBLIGATORIO: responde ÚNICAMENTE en párrafos, sin headers, sin bullets ni listas. No transcribas notas internas literalmente. Genera un resumen ejecutivo extenso que cubra: cuántos contratos activos tiene el agente (por carrier, estado y línea de negocio), cuántos contratos pendientes hay y en qué etapas se encuentran, si alguna etapa requiere acción del agente (firma, envío de documentos, etc.), y cualquier contexto relevante sobre el avance o bloqueo de los contratos en proceso. El resumen debe ser completo, fluido y en lenguaje natural, como si lo redactara un ejecutivo de cuenta.",
           "ending_resolution": "Si deseas profundizar en algún carrier, etapa o estado específico, puedo generarlo ahora. Si la respuesta no es correcta o no cubre tu necesidad, puedes escalar tu consulta a un humano."
         },
         {
@@ -955,7 +955,7 @@
             "p.Commission_Month__c",
             "p.Payment_Type__c"
           ],
-          "entity_resolution": "El resultado muestra un preliquidado de comisiones que aún no han sido pagadas. El campo Members_Paid indica la cantidad de membresías consideradas en el preliquidado, mientras que Net_Payment muestra el monto total preliquidado para el agente. Este reporte es útil para anticipar el monto de comisiones que se espera recibir en el próximo ciclo de pago, aunque no garantiza que todas las comisiones preliquidadas serán efectivamente pagadas, ya que pueden estar sujetas a validaciones finales o ajustes antes del pago definitivo.",
+          "entity_resolution": "El resultado muestra un preliquidado de comisiones que aún no han sido pagadas. El campo Members_Paid indica la cantidad de membresías consideradas en el preliquidado, mientras que Net_Payment muestra el monto total preliquidado para el agente. Este reporte es útil para anticipar el monto de comisiones que se espera recibir en el próximo ciclo de pago, aunque no garantiza que todas las comisiones preliquidadas serán efectivamente pagadas, ya que pueden estar sujetas a validaciones finales o ajustes antes del pago definitivo. La fecha de pago es Pay on Date, que corresponde a la fecha en que la agencia liberará el pago al agente, y Commission Month es la fecha en que el carrier pagó a la agencia. El preliquidado se basa en registros con ProcessingStatus__c igual a 'Pre-liquidated', lo que indica que están en etapa de preliquidación pero aún no han sido finalizados para pago.",
           "ending_resolution": "Si deseas filtrar el preliquidado por carrier o período específico, puedo generarlo ahora. Si la respuesta no es correcta, puedes escalar tu consulta a un humano.",
           "descripciones": {
             "c.NPN__c": "Número de productor nacional del agente (NPN).",
