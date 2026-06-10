@@ -1299,11 +1299,11 @@
           "texto": "Bonus Compensation ACA",
           "tipo": "rag",
           "semantic_examples": [
-          "Bonus Compensation",
-          "Compensación por bono",
-          "Qué bonos tengo disponibles",
-          "Cuáles son los bonos que puedo reclamar",
-          "bonos disponibles y requisitos"
+          "Bonus Compensation ACA",
+          "Compensación por bono ACA",
+          "Qué bonos tengo disponibles en ACA",
+          "Cuáles son los bonos que puedo reclamar en ACA",
+          "bonos disponibles y requisitos en ACA"
           ],
           "coleccion_chroma": "bonus_compensation_aca",
           "embedding_model": "all-MiniLM-L6-v2",
@@ -1317,18 +1317,18 @@
           "tipo": "rag",
           "semantic_examples": [
             "Override Compensation ACA",
-            "compensación override por carrier",
-            "compensacion override por tier",
+            "compensación override por carrier ACA",
+            "compensacion override por tier ACA",
             "Compensación de override ACA",
-            "Tabla de override por carrier",
-            "Cuánto me pagan de override",
-            "Override por banda de miembros",
-            "Cuánto es el override para Ambetter",
-            "Override de Oscar con 600 miembros",
-            "Compensación override por número de miembros",
-            "Qué override corresponde a mi producción",
-            "Override ACA nuevos y renovaciones",
-            "¿Cuál es el porcentaje de override que recibo por las pólizas del carrier?"
+            "Tabla de override por carrier ACA",
+            "Cuánto me pagan de override ACA",
+            "Override por banda de miembros ACA",
+            "Cuánto es el override para Ambetter ACA",
+            "Override de Oscar con 600 miembros ACA",
+            "Compensación override por número de miembros ACA",
+            "Qué override corresponde a mi producción ACA",
+            "Override ACA nuevos y renovaciones ACA",
+            "¿Cuál es el porcentaje de override que recibo por las pólizas del carrier? ACA"
           ],
           "coleccion_chroma": "override_compensation",
           "metadata_filter": {
@@ -1346,11 +1346,11 @@
           "texto": "Commision Compensation ACA",
           "tipo": "rag",
           "semantic_examples": [
-          "Commision Compensation por agente",
-          "Comisiones compensadas por agente y carrier",
-          "Compensación por comisión por agente",
-          "valor de la compensacion por comision para agentes",
-          "¿Cuál es el porcentaje de override que recibo por las pólizas del carrier para agentes?"
+          "Commision Compensation por agente ACA",
+          "Comisiones compensadas por agente y carrier ACA",
+          "Compensación por comisión por agente ACA",
+          "valor de la compensacion por comision para agentes ACA",
+          "¿Cuál es el porcentaje de override que recibo por las pólizas del carrier para agentes? ACA"
 
           ],
           "coleccion_chroma": "commission_compensation",

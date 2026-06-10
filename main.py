@@ -56,7 +56,7 @@ try:
 except Exception:
     _USE_CASES_EMBEDDINGS = {}
 
-_UMBRAL_INTENT = 0.75
+_UMBRAL_INTENT = 0.85
 
 # ── Configuración de tipos de usuario ─────────────────────────────────────────
 #  umbral: similitud coseno mínima (0-1) para aceptar la identificación.
