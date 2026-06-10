@@ -27,6 +27,164 @@ MAX_CHARS_PER_CHUNK = 600
 
 DOCUMENTS = [
     {
+        "filename": "2026_ACA_Bonus_Compensation.pdf",
+        "collection": "bonus_compensation_aca",
+        "chunking": "sliding",
+        "metadata": {
+            "line_of_business":"ACA",
+            "category": "bonus_compensation_aca"
+        }
+    },
+    {
+        "filename": "2026_ACA_Agents_Commision.pdf",
+        "collection": "commission_compensation",
+        "chunking": "whole_page",
+        "metadata": {
+            "line_of_business":"ACA",
+            "category":"commission_compensation_aca"
+        }
+    },
+    {
+        "filename": "2026_ACA_Agency_Override.pdf",
+        "collection": "override_compensation",
+        "chunking": "whole_page",
+        "metadata": {
+            "line_of_business": "ACA",
+            "agency": "general",
+            "category": "override_compensation_aca"
+        }
+    },
+    {
+        "filename": "2026_ACA_NE_Prestige_Override.pdf",
+        "collection": "override_compensation",
+        "chunking": "whole_page",
+        "metadata": {
+            "line_of_business": "ACA",
+            "agency": "Prestige Insurance Consultant",
+            "category": "override_compensation_aca"
+        }
+    },
+    {
+        "filename": "2026_NE_ACA_Carepoint_Override.pdf",
+        "collection": "override_compensation",
+        "chunking": "whole_page",
+        "metadata": {
+            "line_of_business": "ACA",
+            "agency": "Carepoint Insurance LLC",
+            "category": "override_compensation_aca"
+        }
+    },  
+    {
+        "filename": "2026_NE_ACA_Coreshield_Override.pdf",
+        "collection": "override_compensation",
+        "chunking": "whole_page",
+        "metadata": {
+            "line_of_business": "ACA",
+            "agency": "Core Shield Health Agency LLC",
+            "category": "override_compensation_aca"
+        }
+    },
+    {
+        "filename": "2026_NE_ACA_Major_League_Override.pdf",
+        "collection": "override_compensation",
+        "chunking": "whole_page",
+        "metadata": {
+            "line_of_business": "ACA",
+            "agency": "Major League Insurance",
+            "category": "override_compensation_aca"
+        }
+    },  
+    {
+        "filename": "2026_NE_ACA_AMCL_Override.pdf",
+        "collection": "override_compensation",
+        "chunking": "whole_page",
+        "metadata": {
+            "line_of_business": "ACA",
+            "agency": "AMCL Group LLC",
+            "category": "override_compensation_aca"
+        }
+    },  
+    {
+        "filename": "2026_NE_ACA_Solad_Override.pdf",
+        "collection": "override_compensation",
+        "chunking": "whole_page",
+        "metadata": {
+            "line_of_business": "ACA",
+            "agency": "Solutions Advisor Insurance INC",
+            "category": "override_compensation_aca"
+        }
+    },  
+    {
+        "filename": "2026_NE_ACA_Sky_Override.pdf",
+        "collection": "override_compensation",
+        "chunking": "whole_page",
+        "metadata": {
+            "line_of_business": "ACA",
+            "agency": "SKY Insurance LS Corp",
+            "category": "override_compensation_aca"
+        }
+    },  
+    {
+        "filename": "2026_NE_ACA_Elite_Override.pdf",
+        "collection": "override_compensation",
+        "chunking": "whole_page",
+        "metadata": {
+            "line_of_business": "ACA",
+            "agency": "Elite Insurance Agents Corp",
+            "category": "override_compensation_aca"
+        }
+    },  
+    {
+        "filename": "2026_NE_ACA_Arpha_Override.pdf",
+        "collection": "override_compensation",
+        "chunking": "whole_page",
+        "metadata": {
+            "line_of_business": "ACA",
+            "agency": "ARPHA PARTNERS LLC",
+            "category": "override_compensation_aca"
+        }
+    },  
+    {
+        "filename": "2026_NE_ACA_Fenix_Override.pdf",
+        "collection": "override_compensation",
+        "chunking": "whole_page",
+        "metadata": {
+            "line_of_business": "ACA",
+            "agency": "Fenix Protection Group",
+            "category": "override_compensation_aca"
+        }
+    }, 
+    {
+        "filename": "2026_NE_ACA_Comfort_Override.pdf",
+        "collection": "override_compensation",
+        "chunking": "whole_page",
+        "metadata": {
+            "line_of_business": "ACA",
+            "agency": "Comfort Insurance",
+            "category": "override_compensation_aca"
+        }
+    },  
+    {
+        "filename": "2026_NE_ACA_Alliant_Override.pdf",
+        "collection": "override_compensation",
+        "chunking": "whole_page",
+        "metadata": {
+            "line_of_business": "ACA",
+            "agency": "Alliant Insurance Group",
+            "category": "override_compensation_aca"
+        }
+    },  
+    {
+        "filename": "2026_NE_ACA_Select_Override.pdf",
+        "collection": "override_compensation",
+        "chunking": "whole_page",
+        "metadata": {
+            "line_of_business": "ACA",
+            "agency": "Select Insurance",
+            "category": "override_compensation_aca"
+        }
+    },  
+    {
         "filename": "Calendario Pago de Liquidaciones 2026.pdf",
         "collection": "calendario_liquidaciones",
         "chunking": "lines",
@@ -464,6 +622,9 @@ def generate_chunks(text: str, strategy: str) -> list[str]:
 
     elif strategy == "lines":
         return line_chunks(text)
+
+    elif strategy == "whole_page":
+        return [text.strip()] if text.strip() else []
 
     else:
         raise ValueError(f"Estrategia desconocida: {strategy}")

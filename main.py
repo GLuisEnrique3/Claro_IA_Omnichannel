@@ -981,6 +981,7 @@ def _construir_sql_con_llm(
     entidades: dict,
     texto_usuario: str,
     error_previo: str | None = None,
+    tipo_key: str = "3",
 ) -> str:
     """
     Llama a gemini-2.5-pro para construir el SQL final a partir de la plantilla
@@ -989,7 +990,7 @@ def _construir_sql_con_llm(
     """
     # El filtro fijo se inyecta directamente en el SQL base para garantizar
     # que siempre esté presente, independientemente de lo que genere el LLM.
-    sql_base = pregunta["sql"].replace("{dynamic_filters}", filtro_fijo or "").strip()
+    sql_base = pregunta["sql_by_role"][tipo_key].replace("{dynamic_filters}", filtro_fijo or "").strip()
     descripciones = pregunta.get("descripciones", {})
 
     entidades_lines = []
@@ -1077,8 +1078,9 @@ def ejecutar_consulta(
     entidades: dict,
     texto_usuario: str,
     query_log=None,
+    tipo_key: str = "3",
 ) -> str:
-    if pregunta.get("tipo") != "sql" or "sql" not in pregunta:
+    if pregunta.get("tipo") != "sql" or "sql_by_role" not in pregunta:
         return (
             "⚙  Esta opción se encuentra en proceso de implementación. "
             "Gracias por su paciencia."
@@ -1098,7 +1100,7 @@ def ejecutar_consulta(
         _t_sql = time.perf_counter()
         try:
             sql_final = _construir_sql_con_llm(
-                pregunta, filtro_fijo, entidades, texto_usuario, error_previo
+                pregunta, filtro_fijo, entidades, texto_usuario, error_previo, tipo_key
             )
         except Exception as exc:
             error_previo = str(exc)
@@ -1212,7 +1214,36 @@ def _box_line(text: str) -> str:
     return f"│ {text:<{_BOX_W - 2}} │"
 
 
-def ejecutar_rag(pregunta_config: dict, user_query: str, query_log=None) -> None:
+def _aplicar_filtro_agencia(
+    pregunta_config: dict,
+    base_filter: dict | None,
+    agency_name: str | None,
+    tipo_key: str,
+) -> dict | None:
+    """
+    Si el caso de uso requiere filtro de agencia, resuelve el valor 'agency' a usar:
+    - Si la agencia autenticada (rol 1/2) está en 'agency_values' (agencias con
+      documento propio para este caso de uso), se usa ese valor exacto.
+    - En cualquier otro caso (incluido Management) se usa "general".
+    """
+    if not pregunta_config.get("agency_filter"):
+        return base_filter
+
+    agencia_filtro = "general"
+    if tipo_key in ("1", "2") and agency_name in pregunta_config.get("agency_values", []):
+        agencia_filtro = agency_name
+
+    clausula = {"agency": agencia_filtro}
+    return {"$and": [base_filter, clausula]} if base_filter else clausula
+
+
+def ejecutar_rag(
+    pregunta_config: dict,
+    user_query: str,
+    query_log=None,
+    agency_name: str | None = None,
+    tipo_key: str = "3",
+) -> None:
     coleccion_nombre = pregunta_config.get("coleccion_chroma", "documentos_normativos")
     carrier_detection = pregunta_config.get("carrier_detection", False)
     carrier_umbral = pregunta_config.get("carrier_detection_umbral", 0.55)
@@ -1246,6 +1277,8 @@ def ejecutar_rag(pregunta_config: dict, user_query: str, query_log=None) -> None
                 if query_log:
                     query_log.rag_carrier = carrier_match
                 print(f"   Carrier detectado: {carrier_match} (confianza: {carrier_score:.2f})")
+
+    where_filter = _aplicar_filtro_agencia(pregunta_config, where_filter, agency_name, tipo_key)
 
     try:
         results = collection.query(
@@ -1333,6 +1366,7 @@ def _ejecutar_consulta_silenciosa(
     filtro_fijo: str | None,
     entidades: dict,
     texto_usuario: str,
+    tipo_key: str = "3",
 ) -> dict:
     """Ejecuta SQL y retorna dict con resultado. No imprime nada en pantalla."""
     result: dict = {"tipo": "sql", "nombre": pregunta["texto"], "sql": None, "tabla": None, "error": None}
@@ -1341,7 +1375,7 @@ def _ejecutar_consulta_silenciosa(
     for intento in range(1, _MAX_REINTENTOS_SQL + 1):
         try:
             sql_final = _construir_sql_con_llm(
-                pregunta, filtro_fijo, entidades, texto_usuario, error_previo
+                pregunta, filtro_fijo, entidades, texto_usuario, error_previo, tipo_key
             )
             result["sql"] = sql_final
         except Exception as exc:
@@ -1367,6 +1401,8 @@ def _ejecutar_consulta_silenciosa(
 def _ejecutar_rag_silenciosa(
     pregunta_config: dict,
     user_query: str,
+    agency_name: str | None = None,
+    tipo_key: str = "3",
 ) -> dict:
     """Consulta ChromaDB y retorna dict con documentos. No imprime nada en pantalla."""
     result: dict = {"tipo": "rag", "nombre": pregunta_config["texto"], "documentos": [], "error": None}
@@ -1394,6 +1430,8 @@ def _ejecutar_rag_silenciosa(
             carrier_match, _ = _detectar_carrier_rag(user_query, carriers, carrier_umbral)
             if carrier_match:
                 where_filter = {"carrier": carrier_match}
+
+    where_filter = _aplicar_filtro_agencia(pregunta_config, where_filter, agency_name, tipo_key)
 
     try:
         results = collection.query(
@@ -1481,6 +1519,8 @@ def ejecutar_multiple(
     filtro_fijo_key: str | None,
     user_query: str,
     entidades_previas: dict | None = None,
+    tipo_key: str = "3",
+    agency_name: str | None = None,
 ) -> None:
     """Ejecuta en paralelo todos los sub-casos declarados en 'invoca' y sintetiza la respuesta."""
     invoca_ids = pregunta_multiple.get("invoca", [])
@@ -1520,10 +1560,10 @@ def ejecutar_multiple(
             tipo_sp = sp.get("tipo")
             if tipo_sp == "sql":
                 fut = executor.submit(
-                    _ejecutar_consulta_silenciosa, sp, sql_filtro, _entidades_para(sp), user_query
+                    _ejecutar_consulta_silenciosa, sp, sql_filtro, _entidades_para(sp), user_query, tipo_key
                 )
             elif tipo_sp == "rag":
-                fut = executor.submit(_ejecutar_rag_silenciosa, sp, user_query)
+                fut = executor.submit(_ejecutar_rag_silenciosa, sp, user_query, agency_name, tipo_key)
             else:
                 continue
             futures[fut] = sp
@@ -1567,6 +1607,8 @@ def ciclo_consultas(
     catalogos: list[str],
     sql_filtro: str | None,
     filtro_fijo_key: str | None,
+    tipo_key: str = "3",
+    agency_name: str | None = None,
 ):
     _next_query: str | None = None
     _historial_reciente: list[dict] = []
@@ -1744,17 +1786,17 @@ def ciclo_consultas(
                 print("  Procesando su consulta, por favor espere...")
                 ejecutar_multiple(
                     pregunta, use_case_entry["catalogo"], sql_filtro, filtro_fijo_key, user_query,
-                    entidades_previas,
+                    entidades_previas, tipo_key=tipo_key, agency_name=agency_name,
                 )
             elif tipo_pregunta == "rag":
-                ejecutar_rag(pregunta, user_query, query_log=q)
+                ejecutar_rag(pregunta, user_query, query_log=q, agency_name=agency_name, tipo_key=tipo_key)
             else:
                 texto_usuario = user_query if confirmar == "S" else ""
                 entidades    = entidades_previas if confirmar == "S" else {}
 
                 print()
                 print("  Procesando su consulta, por favor espere...")
-                respuesta = ejecutar_consulta(pregunta, sql_filtro, entidades, texto_usuario, query_log=q)
+                respuesta = ejecutar_consulta(pregunta, sql_filtro, entidades, texto_usuario, query_log=q, tipo_key=tipo_key)
                 print()
                 print("RESULTADO:")
                 _sep()
@@ -1794,18 +1836,39 @@ def main():
                     valor_seguro = valor_id.replace("'", "''")
                     sql_filtro = tipo["sql_filtro"].replace("{valor}", valor_seguro)
 
+                # Resolver agencia del usuario (para filtros de RAG por agencia)
+                agency_name = None
+                if tipo_key == "1":
+                    agency_name = valor_id
+                elif tipo_key == "2" and valor_id:
+                    valor_seguro = valor_id.replace("'", "''")
+                    rows = list(client.query(f"""
+                        SELECT a.Name_Agencies
+                        FROM `claroinsurance-dataplatform.salesforce_claro.contact` c
+                        LEFT JOIN `claroinsurance-dataplatform.claro_bi.dim_account_2` a ON a.Id = c.AccountId
+                        WHERE c.NPN__c = '{valor_seguro}'
+                        LIMIT 1
+                    """).result())
+                    agency_name = rows[0]["Name_Agencies"] if rows else None
+
                 print()
                 if valor_id and score is not None:
-                    print(
-                        f'✅ Bienvenido, el sistema ha reconocido tu ingreso "{valor_id}", '
-                        f"nivel de coincidencia {score:.2f}"
-                    )
+                    if tipo_key == "2" and agency_name:
+                        print(
+                            f'✅ Bienvenido, el sistema ha reconocido tu ingreso "NPN:{valor_id}", '
+                            f'"Agencia:{agency_name}", nivel de coincidencia {score:.2f}'
+                        )
+                    else:
+                        print(
+                            f'✅ Bienvenido, el sistema ha reconocido tu ingreso "{valor_id}", '
+                            f"nivel de coincidencia {score:.2f}"
+                        )
                 else:
                     print(f"✅ Bienvenido, {nombre_tipo}")
 
                 _perms = _CATALOG_PERMS.get(tipo_key)
                 _catalogos = [c for c in tipo["catalogos"] if c in _perms] if _perms else tipo["catalogos"]
-                ciclo_consultas(_catalogos, sql_filtro, tipo["filtro_key"])
+                ciclo_consultas(_catalogos, sql_filtro, tipo["filtro_key"], tipo_key, agency_name)
                 break
 
             except MenuError:

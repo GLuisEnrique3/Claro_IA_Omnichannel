@@ -18,6 +18,10 @@ def _normalize_where(where: dict | None) -> dict | None:
     """Normaliza filtros simples {k: v} al formato explícito {k: {"$eq": v}} de ChromaDB."""
     if not where:
         return None
+    if len(where) == 1:
+        k, v = next(iter(where.items()))
+        if k in ("$and", "$or") and isinstance(v, list):
+            return {k: [_normalize_where(expr) for expr in v]}
     return {
         k: (v if isinstance(v, dict) else {"$eq": v})
         for k, v in where.items()
