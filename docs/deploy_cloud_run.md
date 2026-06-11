@@ -17,13 +17,34 @@ Pasos:
 git clone <repo> && cd Claro_IA_Omnichannel
 git checkout feat/google-chat-guided-flow
 
-# 2) Colocar los artefactos (los entrega el equipo de desarrollo como
-#    claro-ia-artefactos-<fecha>.tar.gz — verificar checksum)
-tar -xzf claro-ia-artefactos-<fecha>.tar.gz
+# 2) Generar los artefactos (requiere Python 3.11+ y las keys de GCP)
+
+# 2a. Entorno con dependencias (torch CPU, mismo índice que el Dockerfile)
+python3 -m venv .venv && source .venv/bin/activate
+pip install --index-url https://download.pytorch.org/whl/cpu \
+    --extra-index-url https://pypi.org/simple -r requirements.txt
+
+# 2b. Credenciales: crear .env en la raíz apuntando a las MISMAS keys de
+#     service account que usa el servicio de Cloud Run:
+#       VERTEX_CREDENTIALS_JSON=/ruta/a/vertex-key.json
+#       BQ_CREDENTIALS_JSON=/ruta/a/bq-key.json
+
+# 2c. Generar embeddings de casos de uso (sin credenciales, ~2-5 min;
+#     descarga el modelo MiniLM la primera vez)
+python scripts/precalcular_use_cases.py
+
+# 2d. Generar filtros válidos + sus embeddings (consulta BigQuery — el SA
+#     necesita lectura en claro_bi y salesforce_claro, ~2-5 min)
+python scripts/precalcular_filtros.py
+
+# 2e. Verificar
 ls data/*.pkl
 #   data/filtros_embeddings.pkl     (~52 MB)
 #   data/filtros_validos.pkl        (~240 KB)
 #   data/use_cases_embeddings.pkl   (~2.6 MB)
+
+# NOTA: NO ejecutar scripts/precalcular_embeddings.py — regenera ChromaDB
+# desde los PDFs y no hace falta: chroma_db/ ya viene versionado en git.
 
 # 3) Build — el --platform es OBLIGATORIO si la máquina de build es ARM
 #    (Mac M-series): Cloud Run solo ejecuta linux/amd64
