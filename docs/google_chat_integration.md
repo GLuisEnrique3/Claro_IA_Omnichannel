@@ -89,6 +89,12 @@ Keywords globales en cualquier estado (réplica de `_input()`): `salir`,
 | `GOOGLE_CHAT_AUDIENCE`  | Número de proyecto GCP de la app de Chat (audience del JWT)       |
 | `GOOGLE_CHAT_SKIP_AUTH` | `1` = omite verificación JWT (SOLO pruebas locales, nunca en GCP) |
 | `FLOW_DEBUG`            | `1` = muestra líneas `#--DEBUG` y SQL generado en las respuestas  |
+| `BQ_FLUSH_SYNC`         | `1` = tracking a BigQuery dentro del request (OBLIGATORIO en Cloud Run: con CPU throttling el thread daemon muere al responder) |
+
+**Permisos BigQuery**: el service account necesita `roles/bigquery.dataEditor`
+sobre el dataset `claro_IA` para el tracking (`model_tracking`). Sin él, el
+flush falla con 403 — visible en stderr y como evento `bq_flush_error` en
+`logs/*.jsonl`.
 
 La verificación JWT usa los certificados de `chat@system.gserviceaccount.com`
 (Google Chat NO firma con los certs OAuth2 genéricos).

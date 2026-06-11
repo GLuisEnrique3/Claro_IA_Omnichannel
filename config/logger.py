@@ -1,3 +1,5 @@
+import os
+import sys
 import uuid
 import json
 import time
@@ -127,7 +129,13 @@ class SessionLogger:
         self._append_jsonl(self.current.to_dict())
         q = self.current
         self.current = None
-        threading.Thread(target=_flush_bq, args=(q,), daemon=True).start()
+        # BQ_FLUSH_SYNC=1 (Cloud Run): flush dentro del request. Con CPU
+        # throttling, el CPU se congela al enviar la respuesta y el thread
+        # daemon nunca termina — el tracking se perdería silenciosamente.
+        if os.getenv("BQ_FLUSH_SYNC", "") == "1":
+            _flush_bq(q)
+        else:
+            threading.Thread(target=_flush_bq, args=(q,), daemon=True).start()
 
     def _append_jsonl(self, data: dict) -> None:
         try:
@@ -147,6 +155,30 @@ def _flush_bq(q: QueryLog) -> None:
         )
         job = client.load_table_from_json([q.to_dict()], _BQ_TABLE, job_config=job_config)
         job.result()
+    except Exception as exc:
+        _registrar_error_flush(q, exc)
+
+
+def _registrar_error_flush(q: QueryLog, exc: Exception) -> None:
+    """
+    Deja rastro del fallo de tracking en vez de tragarlo: stderr (visible en
+    consola y en Cloud Logging) + evento en el jsonl diario (greppable).
+    Un 403 de IAM silencioso aquí costó días de tracking perdido.
+    """
+    resumen = f"{type(exc).__name__}: {str(exc)[:300]}"
+    try:
+        sys.stderr.write(f"⚠  bq_flush_error [{q.session_id[:8]}]: {resumen}\n")
+    except Exception:
+        pass
+    try:
+        log_file = LOG_DIR / f"{datetime.date.today().isoformat()}.jsonl"
+        with open(log_file, "a", encoding="utf-8") as f:
+            f.write(json.dumps({
+                "session_id": q.session_id,
+                "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+                "evento": "bq_flush_error",
+                "error": str(exc)[:500],
+            }, ensure_ascii=False, default=str) + "\n")
     except Exception:
         pass
 
