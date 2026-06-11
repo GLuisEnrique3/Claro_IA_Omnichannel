@@ -122,6 +122,43 @@ class TestFlujo:
         assert "(S/N)" not in texto
 
 
+# ── Markdown del LLM → formato Chat ────────────────────────────────────────────
+
+class TestMarkdownAChat:
+    def test_negrita_doble_asterisco(self):
+        assert chat_render.markdown_a_chat("**Writing number**: el NPN") == "*Writing number*: el NPN"
+
+    def test_vinetas_asterisco_y_guion(self):
+        texto = "* primer item\n  * anidado\n- con guion"
+        assert chat_render.markdown_a_chat(texto) == "• primer item\n  • anidado\n• con guion"
+
+    def test_vineta_con_negrita(self):
+        # Caso real de Gemini: "    *   **Commission type**: ..."
+        texto = "    *   **Commission type**: Debes seleccionar \"Monthly\"."
+        assert chat_render.markdown_a_chat(texto) == "    • *Commission type*: Debes seleccionar \"Monthly\"."
+
+    def test_encabezados(self):
+        assert chat_render.markdown_a_chat("## Pasos generales") == "*Pasos generales*"
+
+    def test_links(self):
+        assert chat_render.markdown_a_chat("Ver [guía](https://x.com/g)") == "Ver <https://x.com/g|guía>"
+
+    def test_numeracion_no_cambia(self):
+        texto = "1.  **Identificar las oportunidades**: filtra por carrier."
+        assert chat_render.markdown_a_chat(texto) == "1.  *Identificar las oportunidades*: filtra por carrier."
+
+    def test_se_aplica_a_resultado_rag_y_multiple(self):
+        respuesta = "Pasos:\n1. **Identificar**: accede.\n* **Writing number**: NPN."
+        esperado = "Pasos:\n1. *Identificar*: accede.\n• *Writing number*: NPN."
+        for kind, data in [
+            ("resultado", {"respuesta": respuesta}),
+            ("rag", {"respuesta": respuesta, "documentos": [], "carrier": None}),
+            ("multiple_exec", {"respuesta": respuesta, "debug": ""}),
+        ]:
+            texto = _render(Bloque(kind, "raw", data=data))
+            assert esperado in texto, kind
+
+
 # ── Parsers de salida capturada ────────────────────────────────────────────────
 
 def _salida_rag_sintetica() -> str:

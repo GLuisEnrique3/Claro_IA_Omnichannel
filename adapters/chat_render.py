@@ -15,12 +15,33 @@ Las cards (textParagraph) usan HTML simple: <b>, <i>, <br>.
 """
 import html
 import os
+import re
 
 from core.guided_flow import Bloque, FlowResult
 
 
 def _debug_activo() -> bool:
     return os.getenv("FLOW_DEBUG", "") == "1"
+
+
+def markdown_a_chat(texto: str) -> str:
+    """
+    Convierte Markdown estándar (lo que genera el LLM) al formato de Google
+    Chat: **negrita** → *negrita*, viñetas * → •, ## títulos → *negrita*,
+    [link](url) → <url|link>. Se aplica SOLO a respuestas generadas por el
+    LLM — los textos del flujo ya vienen en formato Chat.
+    """
+    # Viñetas: "* item" / "  * item" → "• item" (antes que bold: ** no matchea)
+    texto = re.sub(r"(?m)^(\s*)\*\s+", r"\1• ", texto)
+    # Viñetas con guion: "- item" → "• item"
+    texto = re.sub(r"(?m)^(\s*)-\s+", r"\1• ", texto)
+    # Negrita: **texto** → *texto*
+    texto = re.sub(r"\*\*(.+?)\*\*", r"*\1*", texto)
+    # Encabezados: "## Título" → "*Título*"
+    texto = re.sub(r"(?m)^#{1,6}\s+(.+?)\s*$", r"*\1*", texto)
+    # Links: [texto](url) → <url|texto>
+    texto = re.sub(r"\[([^\]]+)\]\((https?://[^)\s]+)\)", r"<\2|\1>", texto)
+    return texto
 
 
 def _limpiar(texto: str) -> str:
@@ -118,7 +139,7 @@ def _fmt_otra(b: Bloque) -> str:
 
 def _fmt_resultado(b: Bloque) -> str:
     respuesta = (b.data or {}).get("respuesta", _limpiar(b.texto))
-    return f"*Resultado*\n{respuesta}"
+    return f"*Resultado*\n{markdown_a_chat(respuesta)}"
 
 
 def _fmt_multiple_exec(b: Bloque) -> str:
@@ -126,7 +147,8 @@ def _fmt_multiple_exec(b: Bloque) -> str:
     partes = []
     if _debug_activo() and data.get("debug"):
         partes.append(f"```\n{data['debug']}\n```")
-    partes.append(f"*Resultado*\n{data.get('respuesta', _limpiar(b.texto))}")
+    respuesta = data.get("respuesta", _limpiar(b.texto))
+    partes.append(f"*Resultado*\n{markdown_a_chat(respuesta)}")
     return "\n\n".join(partes)
 
 
@@ -135,7 +157,8 @@ def _fmt_rag(b: Bloque) -> str:
     partes = []
     if data.get("carrier"):
         partes.append(f"_Carrier detectado: {data['carrier']}_")
-    partes.append(f"*Resultado*\n{data.get('respuesta', _limpiar(b.texto))}")
+    respuesta = data.get("respuesta", _limpiar(b.texto))
+    partes.append(f"*Resultado*\n{markdown_a_chat(respuesta)}")
     return "\n\n".join(partes)
 
 
