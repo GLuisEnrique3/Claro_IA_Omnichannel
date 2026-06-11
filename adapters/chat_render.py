@@ -162,14 +162,85 @@ def _fmt_rag(b: Bloque) -> str:
     return "\n\n".join(partes)
 
 
+def _transformar_instrucciones(texto: str) -> str:
+    """
+    Convierte la pantalla de instrucciones del CLI (cajas, separadores ══ y
+    tabla ASCII de filtros) a formato nativo de Chat: títulos en negrita y
+    la tabla como lista de viñetas "• *Filtro*: ejemplos".
+    """
+    lineas = texto.split("\n")
+    out: list[str] = []
+    tabla: list[tuple[str, list[str]]] = []  # (filtro, ejemplos)
+
+    def _vaciar_tabla() -> None:
+        for filtro, ejemplos in tabla:
+            # "(*)" fuera de la negrita: un * interno rompe el parseo de *...*
+            sufijo = ""
+            if "(*)" in filtro:
+                filtro = filtro.replace("(*)", "").strip()
+                sufijo = " (*)"
+            out.append(f"• *{filtro}*{sufijo}: " + ", ".join(ejemplos))
+        tabla.clear()
+
+    i, n = 0, len(lineas)
+    while i < n:
+        s = lineas[i].strip()
+
+        if not s:
+            _vaciar_tabla()
+            out.append("")
+            i += 1
+            continue
+
+        # Separadores ══ — patrón título: ══ / TÍTULO / ══
+        if set(s) <= {"═"}:
+            if i + 2 < n and lineas[i + 1].strip() and set(lineas[i + 2].strip()) <= {"═"}:
+                _vaciar_tabla()
+                out.append(f"*{lineas[i + 1].strip()}*")
+                i += 3
+                continue
+            i += 1
+            continue
+
+        # Decoración de terminal: caja del título, separador final, bordes de tabla
+        if s[0] in "╔║╚━┌├└":
+            i += 1
+            continue
+
+        # Filas de la tabla │ FILTRO │ EJEMPLOS │
+        if s.startswith("│"):
+            celdas = [c.strip() for c in s.strip("│").split("│")]
+            if len(celdas) >= 2:
+                filtro, ejemplo = celdas[0], celdas[1]
+                if filtro and filtro.upper() != "FILTRO":
+                    tabla.append((filtro, [ejemplo] if ejemplo else []))
+                elif not filtro and tabla and ejemplo:
+                    tabla[-1][1].append(ejemplo)
+            i += 1
+            continue
+
+        # Sub-títulos en MAYÚSCULAS sueltos (CONTRATOS, PAGOS Y COMISIONES, ...)
+        if s == s.upper() and any(ch.isalpha() for ch in s) and not s.startswith(("·", "(")):
+            out.append(f"*{s}*")
+            i += 1
+            continue
+
+        out.append(lineas[i].rstrip().removeprefix("  "))
+        i += 1
+
+    _vaciar_tabla()
+
+    # Colapsar líneas vacías múltiples y limpiar bordes
+    resultado: list[str] = []
+    for linea in out:
+        if linea == "" and resultado and resultado[-1] == "":
+            continue
+        resultado.append(linea)
+    return "\n".join(resultado).strip("\n")
+
+
 def _fmt_instrucciones(b: Bloque) -> str:
-    # Quitar la caja ╔═╗ del título y dejar el resto del contenido del CLI
-    lineas = [
-        linea for linea in b.texto.split("\n")
-        if not linea.startswith(("╔", "║", "╚"))
-    ]
-    cuerpo = "\n".join(lineas).strip("\n")
-    return f"*INSTRUCCIONES DE USO*\n\n{cuerpo}"
+    return f"*INSTRUCCIONES DE USO*\n\n{_transformar_instrucciones(b.texto)}"
 
 
 def _fmt_omitir(b: Bloque) -> None:
@@ -204,6 +275,19 @@ _FORMATTERS = {
     # prompt_valor, bienvenida, ident_error, no_flujo, invalida, saludo,
     # escalar, volver, nueva_sesion, despedida, salir → _fmt_default
 }
+
+
+def texto_a_html_card(texto: str) -> str:
+    """
+    Convierte texto en formato Chat (*negrita*, _cursiva_) a HTML simple para
+    cards (textParagraph): las cards NO parsean el markdown de mensajes.
+    Los límites de palabra evitan falsos positivos en identificadores tipo
+    Payment_Status__c o "(*)".
+    """
+    t = html.escape(texto, quote=False)
+    t = re.sub(r"(?<![\w*])\*([^*\n]+?)\*(?![\w*])", r"<b>\1</b>", t)
+    t = re.sub(r"(?<![\w])_([^_\n]+?)_(?![\w])", r"<i>\1</i>", t)
+    return t
 
 
 def _card_documentos(documentos: list[dict]) -> dict:

@@ -122,6 +122,59 @@ class TestFlujo:
         assert "(S/N)" not in texto
 
 
+# ── Instrucciones: pantalla del CLI → formato Chat ─────────────────────────────
+
+class TestInstrucciones:
+    @pytest.fixture
+    def render_instrucciones(self):
+        from core.guided_flow import _capturado
+        salida, _ = _capturado(cli._mostrar_instrucciones)
+        return _render(Bloque("instrucciones", salida))
+
+    def test_sin_decoracion_de_terminal(self, render_instrucciones):
+        for char in ("═", "│", "┌", "├", "└", "━", "╔", "║", "╚"):
+            assert char not in render_instrucciones, f"queda decoración: {char}"
+
+    def test_titulos_en_negrita(self, render_instrucciones):
+        assert "*INSTRUCCIONES DE USO*" in render_instrucciones
+        assert "*FLUJO GENERAL DEL SISTEMA*" in render_instrucciones
+        assert "*FILTROS QUE RECONOCE EL SISTEMA*" in render_instrucciones
+        assert "*CONTRATOS*" in render_instrucciones
+        assert "*PAGOS Y COMISIONES*" in render_instrucciones
+
+    def test_tabla_de_filtros_como_vinetas(self, render_instrucciones):
+        assert '• *Carrier*: "con Ambetter", "de Humana"  /  "solo Aetna"' in render_instrucciones
+        assert '• *NPN*: "del NPN 1234567", "agente NPN 9876543"' in render_instrucciones
+
+    def test_marcador_obligatorio_fuera_de_la_negrita(self, render_instrucciones):
+        # Un * dentro de *...* rompe el parseo de negrita en Chat y en cards
+        assert '• *Número de Póliza* (*): ' in render_instrucciones
+        assert '• *ID de Oportunidad* (*): ' in render_instrucciones
+
+    def test_contenido_se_conserva(self, render_instrucciones):
+        assert "1. IDENTIFICACIÓN" in render_instrucciones
+        assert "· Comisiones Pagadas" in render_instrucciones
+        assert "instrucciones / help / ayuda — muestra esta pantalla" in render_instrucciones
+
+
+# ── Formato Chat → HTML para cards ─────────────────────────────────────────────
+
+class TestTextoAHtmlCard:
+    def test_negrita_y_cursiva(self):
+        assert chat_render.texto_a_html_card("*Título*\n_nota_") == "<b>Título</b>\n<i>nota</i>"
+
+    def test_identificadores_con_underscore_no_se_tocan(self):
+        texto = "La columna Payment_Status__c y p.Pay_on_Date__c"
+        assert chat_render.texto_a_html_card(texto) == texto
+
+    def test_asterisco_suelto_no_se_toca(self):
+        texto = "(*) Estas consultas requieren al menos un filtro"
+        assert chat_render.texto_a_html_card(texto) == texto
+
+    def test_escapa_html(self):
+        assert chat_render.texto_a_html_card("a < b") == "a &lt; b"
+
+
 # ── Markdown del LLM → formato Chat ────────────────────────────────────────────
 
 class TestMarkdownAChat:

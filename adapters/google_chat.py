@@ -26,7 +26,7 @@ import google.oauth2.id_token
 
 from core.guided_flow import FlowResult, OMITIR_SENTINEL, step
 from core.conversation_store import conversation_store
-from adapters.chat_render import render_chat
+from adapters.chat_render import render_chat, texto_a_html_card
 
 router = APIRouter()
 
@@ -101,10 +101,11 @@ def _render_mensaje(result: FlowResult, echo: str | None = None) -> dict:
         if texto:
             mensaje["text"] = texto
     else:
-        # Texto largo (p. ej. instrucciones) → card con párrafos
+        # Texto largo (p. ej. instrucciones) → card con párrafos.
+        # Las cards usan HTML simple, no el formato *negrita* de mensajes.
         widgets = []
         for chunk in _trocear(texto, _MAX_TEXTO_SIMPLE):
-            widgets.append({"textParagraph": {"text": chunk}})
+            widgets.append({"textParagraph": {"text": texto_a_html_card(chunk)}})
         cards.append({
             "cardId": "contenido",
             "card": {"sections": [{"widgets": widgets}]},
