@@ -16,3 +16,11 @@ README.md
 SETUP.md
 CLAUDE.md
 .claude/
+# Datos de usuarios en runtime — NUNCA dentro de la imagen
+data/guided_flow_sessions.json
+data/conversation_history.json
+data/google_chat_users.json
+data/*.tmp
+docs/
+notes/
+app/

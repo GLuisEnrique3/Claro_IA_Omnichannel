@@ -35,11 +35,13 @@ COPY --from=builder /root/.cache/huggingface /root/.cache/huggingface
 COPY core/ ./core/
 COPY adapters/ ./adapters/
 COPY config/ ./config/
-COPY app/ ./app/
 COPY main.py .
 COPY api.py .
 
-# Artefactos pre-generados (pkl + chroma)
+# Artefactos pre-generados — IMPORTANTE: data/*.pkl y chroma_db/ están
+# gitignorados; la imagen DEBE construirse desde un working tree que los
+# tenga actualizados (build local), no desde un checkout limpio de git.
+# Los JSON de sesiones/historial de usuarios quedan fuera via .dockerignore.
 COPY data/ ./data/
 COPY chroma_db/ ./chroma_db/
 
@@ -49,4 +51,8 @@ ENV PYTHONUNBUFFERED=1
 ENV HF_HUB_OFFLINE=1
 
 EXPOSE 8000
-CMD ["uvicorn", "api:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+
+# Cloud Run inyecta $PORT (default 8080); local cae a 8000.
+# --workers 1 es OBLIGATORIO: ChromaDB PersistentClient y las sesiones JSON
+# no admiten múltiples procesos.
+CMD ["sh", "-c", "exec uvicorn api:app --host 0.0.0.0 --port ${PORT:-8000} --workers 1"]
