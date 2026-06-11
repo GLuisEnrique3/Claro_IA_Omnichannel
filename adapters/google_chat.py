@@ -1,0 +1,210 @@
+"""
+Adapter Google Chat — webhook que expone el flujo guiado del CLI (main.py)
+replicado por core/guided_flow.py.
+
+Eventos soportados:
+    ADDED_TO_SPACE → inicia sesión: header + menú de identificación
+    MESSAGE        → texto del usuario → GuidedFlow.step()
+    CARD_CLICKED   → click en botón → mismo step() con el valor del botón
+
+Sesiones por usuario: clave gchat::{space}::{user} en data/guided_flow_sessions.json.
+Historial conversacional: sliding window de 10 turnos por sesión en
+data/conversation_history.json (core/conversation_store.py).
+
+Seguridad: verificación del JWT que firma Google Chat
+(chat@system.gserviceaccount.com) contra GOOGLE_CHAT_AUDIENCE.
+Para pruebas locales con curl: GOOGLE_CHAT_SKIP_AUTH=1.
+"""
+import asyncio
+import os
+import threading
+
+from fastapi import APIRouter, HTTPException, Request
+
+import google.auth.transport.requests
+import google.oauth2.id_token
+
+from core.guided_flow import FlowResult, OMITIR_SENTINEL, step
+from core.conversation_store import conversation_store
+
+router = APIRouter()
+
+# Límite de caracteres para mensajes de texto simple de Google Chat
+_MAX_TEXTO_SIMPLE = 4000
+
+# Locks por sesión: serializa mensajes concurrentes del mismo usuario
+_SESSION_LOCKS: dict[str, threading.Lock] = {}
+_LOCKS_GUARD = threading.Lock()
+
+
+def _lock_de(session_key: str) -> threading.Lock:
+    with _LOCKS_GUARD:
+        if session_key not in _SESSION_LOCKS:
+            _SESSION_LOCKS[session_key] = threading.Lock()
+        return _SESSION_LOCKS[session_key]
+
+
+# ── Verificación JWT de Google ─────────────────────────────────────────────────
+
+def _verificar_jwt_google(authorization: str) -> dict:
+    """
+    Verifica el JWT enviado por Google Chat.
+    Google Chat firma con chat@system.gserviceaccount.com (certs propios),
+    NO con los certs OAuth2 genéricos — por eso se pasa certs_url explícito.
+    """
+    if os.getenv("GOOGLE_CHAT_SKIP_AUTH", "") == "1":
+        return {}
+
+    if not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="No autorizado")
+
+    token = authorization.removeprefix("Bearer ").strip()
+    if not token:
+        raise HTTPException(status_code=401, detail="No autorizado")
+
+    audience = os.getenv("GOOGLE_CHAT_AUDIENCE", "")
+
+    _CHAT_CERTS_URL = (
+        "https://www.googleapis.com/service_accounts/v1/metadata/x509/"
+        "chat@system.gserviceaccount.com"
+    )
+
+    try:
+        transport = google.auth.transport.requests.Request()
+        return google.oauth2.id_token.verify_token(
+            token, transport, audience=audience, certs_url=_CHAT_CERTS_URL
+        )
+    except Exception:
+        raise HTTPException(status_code=401, detail="No autorizado")
+
+
+# ── Render: FlowResult → mensaje de Google Chat ────────────────────────────────
+
+def _render_mensaje(result: FlowResult, echo: str | None = None) -> dict:
+    """
+    Convierte un FlowResult en JSON de mensaje de Google Chat.
+    Texto ≤ 4000 chars → mensaje de texto simple; más largo → card con
+    textParagraph (límite de texto simple de Chat: 4096 chars).
+    Los botones sugeridos se agregan como card con buttonList.
+    """
+    texto = result.texto
+    if echo:
+        texto = f"_{echo}_\n{texto}"
+
+    mensaje: dict = {}
+    cards: list[dict] = []
+
+    if len(texto) <= _MAX_TEXTO_SIMPLE:
+        mensaje["text"] = texto
+    else:
+        # Texto largo (p. ej. instrucciones) → card con párrafos
+        widgets = []
+        for chunk in _trocear(texto, _MAX_TEXTO_SIMPLE):
+            widgets.append({"textParagraph": {"text": chunk}})
+        cards.append({
+            "cardId": "contenido",
+            "card": {"sections": [{"widgets": widgets}]},
+        })
+
+    if result.botones:
+        botones_widgets = {
+            "buttonList": {
+                "buttons": [
+                    {
+                        "text": label,
+                        "onClick": {
+                            "action": {
+                                "function": "responder",
+                                "parameters": [{"key": "valor", "value": value}],
+                            }
+                        },
+                    }
+                    for label, value in result.botones
+                ]
+            }
+        }
+        cards.append({
+            "cardId": "acciones",
+            "card": {"sections": [{"widgets": [botones_widgets]}]},
+        })
+
+    if cards:
+        mensaje["cardsV2"] = cards
+    return mensaje
+
+
+def _trocear(texto: str, maximo: int) -> list[str]:
+    """Parte el texto en bloques de hasta `maximo` chars cortando por línea."""
+    bloques, actual = [], ""
+    for linea in texto.split("\n"):
+        if len(actual) + len(linea) + 1 > maximo and actual:
+            bloques.append(actual)
+            actual = linea
+        else:
+            actual = f"{actual}\n{linea}" if actual else linea
+    if actual:
+        bloques.append(actual)
+    return bloques
+
+
+# ── Procesamiento de un turno ──────────────────────────────────────────────────
+
+def _procesar_turno(session_key: str, texto: str) -> FlowResult:
+    """Ejecuta GuidedFlow.step() serializado por sesión (corre en thread)."""
+    with _lock_de(session_key):
+        resultado = step(session_key, texto)
+        # Historial conversacional del ticket: sliding window de 10 turnos
+        # (user + assistant) por sesión. TTL 24h.
+        conversation_store.append(session_key, texto or "(inicio)", resultado.texto)
+        return resultado
+
+
+# ── Webhook principal ──────────────────────────────────────────────────────────
+
+@router.post("/webhook", summary="Webhook de Google Chat")
+async def webhook(request: Request):
+    """Recibe eventos de Google Chat, verifica el JWT y enruta al flujo guiado."""
+    auth_header = request.headers.get("Authorization", "")
+    _verificar_jwt_google(auth_header)
+
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Payload invalido")
+
+    event_type = body.get("type", "")
+    user_id = body.get("user", {}).get("name", "")
+    space_name = body.get("space", {}).get("name", "")
+    session_key = f"gchat::{space_name or 'unknown'}::{user_id or 'unknown'}"
+
+    if event_type == "ADDED_TO_SPACE":
+        # Arranque igual que el CLI: header + identificación
+        resultado = await asyncio.to_thread(_procesar_turno, session_key, "")
+        return _render_mensaje(resultado)
+
+    if event_type == "CARD_CLICKED":
+        action = body.get("action", {}) or {}
+        parametros = action.get("parameters") or body.get("common", {}).get("parameters") or []
+        if isinstance(parametros, dict):
+            valor = parametros.get("valor", "")
+        else:
+            valor = next((p.get("value", "") for p in parametros if p.get("key") == "valor"), "")
+        echo = "Selección: Omitir filtros (Enter)" if valor == OMITIR_SENTINEL else f"Selección: {valor}"
+        resultado = await asyncio.to_thread(_procesar_turno, session_key, valor)
+        respuesta = _render_mensaje(resultado, echo=echo)
+        # NEW_MESSAGE: la respuesta se publica como mensaje nuevo y la
+        # conversación queda visible como transcript (igual que el CLI).
+        respuesta["actionResponse"] = {"type": "NEW_MESSAGE"}
+        return respuesta
+
+    if event_type != "MESSAGE":
+        return {}
+
+    # argumentText excluye la mención al bot en espacios grupales
+    mensaje = body.get("message", {})
+    texto = (mensaje.get("argumentText") or mensaje.get("text") or "").strip()
+    if not texto:
+        return {}
+
+    resultado = await asyncio.to_thread(_procesar_turno, session_key, texto)
+    return _render_mensaje(resultado)

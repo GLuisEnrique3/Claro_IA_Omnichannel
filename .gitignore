@@ -37,3 +37,8 @@ desktop.ini
 
 app/
 
+
+# Sesiones y estado runtime de canales (Google Chat)
+data/guided_flow_sessions.json
+data/conversation_history.json
+data/google_chat_users.json

@@ -27,3 +27,8 @@ clouddemo-service-account={
   "client_x509_cert_url": "",
   "universe_domain": ""
 }
+# Google Chat webhook
+# Audience del JWT que firma Google Chat = número de proyecto GCP de la app de Chat
+GOOGLE_CHAT_AUDIENCE=
+# Solo para pruebas locales con curl (NUNCA en Cloud Run): omite la verificación JWT
+GOOGLE_CHAT_SKIP_AUTH=0
