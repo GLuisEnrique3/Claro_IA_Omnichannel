@@ -560,10 +560,10 @@ def detectar_caso_de_uso(
     best_id, best_score = None, 0.0
     for uc_id, entry in candidatos.items():
         if "embeddings_list" in entry:
-            c_emb = torch.tensor(entry["embeddings_list"])
+            c_emb = torch.tensor(entry["embeddings_list"], device=q_emb.device)
             score = float(util.cos_sim(q_emb, c_emb)[0].max())
         else:
-            uc_emb = torch.tensor(entry["embedding"])
+            uc_emb = torch.tensor(entry["embedding"], device=q_emb.device)
             score = float(util.cos_sim(q_emb, uc_emb)[0][0])
         if score > best_score:
             best_score, best_id = score, uc_id
@@ -599,7 +599,7 @@ def _buscar_semantico(
     model = _get_embed_model()
     q_emb = model.encode(query, convert_to_tensor=True)
     if embs_precalc is not None:
-        c_emb = torch.tensor(embs_precalc)
+        c_emb = torch.tensor(embs_precalc, device=q_emb.device)
     else:
         c_emb = model.encode([str(c) for c in candidatos], convert_to_tensor=True)
     scores = util.cos_sim(q_emb, c_emb)[0]
@@ -798,7 +798,7 @@ def extraer_entidades(
 
         embs_pre = FILTROS_EMBEDDINGS.get(filtro_key, {}).get("embeddings")
         if embs_pre:
-            c_emb = torch.tensor(embs_pre)
+            c_emb = torch.tensor(embs_pre, device=ngram_embs.device)
         else:
             c_emb = model.encode([str(c) for c in candidatos], convert_to_tensor=True)
 
