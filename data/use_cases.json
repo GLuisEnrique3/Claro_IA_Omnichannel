@@ -676,7 +676,13 @@
             "Necesito el resumen de pagos de comisiones",
             "Cuántas membresías pagadas tuve en el último ciclo",
             "Comisiones pagadas por tipo",
-            "qué pagos he recibido este mes"
+            "qué pagos he recibido este mes",
+            "Cuántas comisiones he recibido",
+            "Cuántas comisiones he recibido este mes",
+            "cuantas comisiones recibidas",
+            "Cuántas comisiones me han pagado",
+            "Cuántas comisiones recibí el mes pasado",
+            "Comisiones recibidas"
           ],
           "sql_by_role": {
             "1": "SELECT COALESCE(SUM(CASE WHEN p.Payment_Type__c NOT IN ('Override','Bonus') THEN SAFE_CAST(p.Members_Paid__c AS INT64) ELSE 0 END ), 0) AS Payment_Memberships, SUM(SAFE_CAST(p.Net_Payment__c AS FLOAT64)) AS Net_Payment,SUM(CASE WHEN SAFE_CAST(p.Net_Payment__c AS FLOAT64) > 0 THEN SAFE_CAST(p.Net_Payment__c AS FLOAT64) ELSE 0 END) AS Payment,SUM(CASE WHEN SAFE_CAST(p.Net_Payment__c AS FLOAT64) < 0 THEN SAFE_CAST(p.Net_Payment__c AS FLOAT64) ELSE 0 END) AS Debit,SUM(SAFE_CAST(p.Members_Paid__c AS INT64)) AS General_Members FROM `claroinsurance-dataplatform.salesforce_claro.payment` p LEFT JOIN `claroinsurance-dataplatform.claro_bi.dim_cslb` o ON o.Id = p.Carrier_State_line_of_Business__c LEFT JOIN `claroinsurance-dataplatform.claro_bi.dim_contact` c ON c.Id = p.Contact_Payee__c LEFT JOIN `claroinsurance-dataplatform.claro_bi.dim_account_2` a ON a.Id = c.AccountId WHERE p.Internal_Company_lookup__c = 'a081G00000C9sU8QAJ'AND (p.Payment_Status__c = 'Paid' OR p.Payment_Status__c = 'Paid by carrier' OR p.Payment_Status__c = 'Pending') {dynamic_filters} ",
@@ -732,7 +738,12 @@
             "Qué comisiones están retenidas o no liberadas",
             "Cuánto dinero está bloqueado en comisiones por cobrar",
             "Hay comisiones que no se han procesado, cuánto es",
-            "Necesito ver qué pagos de comisiones están pendientes de liberación"
+            "Necesito ver qué pagos de comisiones están pendientes de liberación",
+            "Cuánto tengo en comisiones bloqueadas",
+            "cuánto comisiones bloqueadas",
+            "Cuánto tengo bloqueado en comisiones",
+            "Total de comisiones bloqueadas",
+            "Monto de comisiones bloqueadas"
           ],
           "sql_by_role": {
             "1": "SELECT COALESCE(SUM(CASE WHEN p.Payment_Type__c NOT IN ('Override','Bonus') THEN SAFE_CAST(p.Members_Paid__c AS INT64) ELSE 0 END ), 0) AS Payment_Memberships, SUM(SAFE_CAST(p.Net_Payment__c AS FLOAT64)) AS Net_Payment,SUM(CASE WHEN SAFE_CAST(p.Net_Payment__c AS FLOAT64) > 0 THEN SAFE_CAST(p.Net_Payment__c AS FLOAT64) ELSE 0 END) AS Payment,SUM(CASE WHEN SAFE_CAST(p.Net_Payment__c AS FLOAT64) < 0 THEN SAFE_CAST(p.Net_Payment__c AS FLOAT64) ELSE 0 END) AS Debit,SUM(SAFE_CAST(p.Members_Paid__c AS INT64)) AS General_Members FROM `claroinsurance-dataplatform.salesforce_claro.payment` p LEFT JOIN `claroinsurance-dataplatform.claro_bi.dim_cslb` o ON o.Id = p.Carrier_State_line_of_Business__c LEFT JOIN `claroinsurance-dataplatform.claro_bi.dim_contact` c ON c.Id = p.Contact_Payee__c LEFT JOIN `claroinsurance-dataplatform.claro_bi.dim_account_2` a ON a.Id = c.AccountId WHERE p.Internal_Company_lookup__c = 'a081G00000C9sU8QAJ'AND p.Payment_Status__c NOT IN ('Paid','Paid by carrier','Pending') {dynamic_filters} ",
@@ -1299,15 +1310,15 @@
           "texto": "Bonus Compensation ACA",
           "tipo": "rag",
           "semantic_examples": [
-          "Bonus Compensation ACA",
-          "Compensación por bono ACA",
-          "Qué bonos tengo disponibles en ACA",
-          "Cuáles son los bonos que puedo reclamar en ACA",
-          "bonos disponibles y requisitos en ACA"
+            "Bonus Compensation ACA",
+            "Compensación por bono ACA",
+            "Qué bonos tengo disponibles en ACA",
+            "Cuáles son los bonos que puedo reclamar en ACA",
+            "bonos disponibles y requisitos en ACA"
           ],
           "coleccion_chroma": "bonus_compensation_aca",
           "embedding_model": "all-MiniLM-L6-v2",
-          "entity_resolution":" Responde basándote exclusivamente en la información de Bonus Compensation de Claro Insurance. Detalla los bonos disponibles para agentes, sus requisitos específicos, y el proceso para reclamarlos. Si es posible el url del flyer. Si el usuario pregunta por un bono específico, proporciona la información detallada sobre ese bono. Si la información no cubre su pregunta o si tiene dudas adicionales, puedes escalar su consulta a un humano.",
+          "entity_resolution": " Responde basándote exclusivamente en la información de Bonus Compensation de Claro Insurance. Detalla los bonos disponibles para agentes, sus requisitos específicos, y el proceso para reclamarlos. Si es posible el url del flyer. Si el usuario pregunta por un bono específico, proporciona la información detallada sobre ese bono. Si la información no cubre su pregunta o si tiene dudas adicionales, puedes escalar su consulta a un humano.",
           "ending_resolution": "Si deseas revisar los requisitos de un carrier específico o el significado de algún estado, puedo consultarlo ahora. Si tu situación no se resuelve con la guía, puedes escalar tu consulta a un humano."
         },
         {
@@ -1335,7 +1346,21 @@
             "category": "override_compensation_aca"
           },
           "agency_filter": true,
-          "agency_values": ["Prestige Insurance Consultant","Carepoint Insurance LLC","Core Shield Health Agency LLC","Major League Insurance","AMCL Group LLC","Solutions Advisor Insurance INC","SKY Insurance LS Corp","Elite Insurance Agents Corp","ARPHA PARTNERS LLC","Fenix Protection Group","Comfort Insurance","Alliant Insurance Group","Select Insurance"],
+          "agency_values": [
+            "Prestige Insurance Consultant",
+            "Carepoint Insurance LLC",
+            "Core Shield Health Agency LLC",
+            "Major League Insurance",
+            "AMCL Group LLC",
+            "Solutions Advisor Insurance INC",
+            "SKY Insurance LS Corp",
+            "Elite Insurance Agents Corp",
+            "ARPHA PARTNERS LLC",
+            "Fenix Protection Group",
+            "Comfort Insurance",
+            "Alliant Insurance Group",
+            "Select Insurance"
+          ],
           "embedding_model": "all-MiniLM-L6-v2",
           "entity_resolution": "FORMATO OBLIGATORIO: Resumen ejecutivo tipo parrafo. Esta tabla muestra la compensación de Override ACA para Agencias para Pólizas Nuevas y Renovadas, organizada por aseguradora y banda de número de miembros (300–500, 501–1,000, 1,001–2,000, 2,001–4,000, 4,001+). Los montos son en dólares por miembro. Cuando el usuario pregunte por un carrier específico, identifica la fila correspondiente y otorgale una descripcion. Uso los comentarios en la parte inferior de la tabla",
           "ending_resolution": "Si deseas consultar el override de otro carrier o banda de miembros, puedo buscarlo ahora mismo. Si la información no cubre tu necesidad, puedes escalar tu consulta a un humano."
@@ -1346,19 +1371,18 @@
           "texto": "Commision Compensation ACA",
           "tipo": "rag",
           "semantic_examples": [
-          "Commision Compensation por agente ACA",
-          "Comisiones compensadas por agente y carrier ACA",
-          "Compensación por comisión por agente ACA",
-          "valor de la compensacion por comision para agentes ACA",
-          "¿Cuál es el porcentaje de override que recibo por las pólizas del carrier para agentes? ACA"
-
+            "Commision Compensation por agente ACA",
+            "Comisiones compensadas por agente y carrier ACA",
+            "Compensación por comisión por agente ACA",
+            "valor de la compensacion por comision para agentes ACA",
+            "¿Cuál es el porcentaje de override que recibo por las pólizas del carrier para agentes? ACA"
           ],
           "coleccion_chroma": "commission_compensation",
           "metadata_filter": {
             "category": "commission_compensation_aca"
           },
           "embedding_model": "all-MiniLM-L6-v2",
-          "entity_resolution":" Responde basándote exclusivamente en la información de Commission Compensation de Claro Insurance. Tienes como recurso Carrier,Detalle/Plan,Estado Geografico,Compensación por Comisión del Tipo New or Renewal, Mercado ON&OFF Exchange. Debes generar una respuesta detallando el Carrier, el estado, la compensación por New, Renewal y Detalle/Plan o Mercado si aporta valor. Puedes basarte en las Notas también, si agregan valor. Si la información no cubre su pregunta o si tiene dudas adicionales, puedes escalar su consulta a un humano.",
+          "entity_resolution": " Responde basándote exclusivamente en la información de Commission Compensation de Claro Insurance. Tienes como recurso Carrier,Detalle/Plan,Estado Geografico,Compensación por Comisión del Tipo New or Renewal, Mercado ON&OFF Exchange. Debes generar una respuesta detallando el Carrier, el estado, la compensación por New, Renewal y Detalle/Plan o Mercado si aporta valor. Puedes basarte en las Notas también, si agregan valor. Si la información no cubre su pregunta o si tiene dudas adicionales, puedes escalar su consulta a un humano.",
           "ending_resolution": "Si deseas ampliar el análisis del preliquidado por póliza específica, puedo consultarlo de inmediato. Si la respuesta no cubre tu necesidad, puedes escalar tu consulta a un humano."
         }
       ]
