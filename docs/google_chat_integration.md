@@ -158,14 +158,38 @@ responden "⚙ Esta opción se encuentra en proceso de implementación":
 python scripts/precalcular_use_cases.py
 ```
 
+## Evolución: ¿qué pasa cuando main.py cambia?
+
+| Cambio en el CLI | ¿Se propaga a Chat? | Acción requerida |
+|---|---|---|
+| Nuevo caso de uso en `use_cases.json` | ✅ Automático | `precalcular_use_cases.py` + redeploy |
+| Cambios dentro de `ejecutar_*`, prompts LLM, reintentos | ✅ Automático (import + captura) | Nada |
+| Formato de prints de `ejecutar_rag/multiple/instrucciones` | ⚠ Fallback a texto crudo | El canario avisa; ajustar parsers |
+| Orquestación conversacional (`ciclo_consultas`, `identificar_usuario`, keywords, nuevos `input()`) | ❌ Manual | El canario avisa; reflejar en `core/guided_flow.py` |
+
+**Test canario** (`test/test_canario_orquestacion.py`): hashea el código fuente
+de las funciones de orquestación de `main.py`. Si alguien las modifica, el test
+falla indicando qué archivo espejo revisar — el drift no puede pasar silencioso.
+Tras sincronizar (o confirmar que el cambio no afecta la conversación),
+actualizar el hash:
+
+```bash
+python test/test_canario_orquestacion.py   # imprime los hashes actuales
+```
+
 ## Tests
 
 ```bash
-pytest test/test_guided_flow.py test/test_conversation_store.py -v
+pytest test/ -v
 ```
 
-`test_guided_flow.py` verifica la orquestación (estados, textos exactos, orden
-de líneas) con las funciones pesadas (LLM/BigQuery/embeddings) mockeadas.
+- `test_guided_flow.py` — orquestación (estados, textos exactos, orden) con
+  las funciones pesadas (LLM/BigQuery/embeddings) mockeadas.
+- `test_chat_render.py` — formato Google Chat (debug oculto, markdown del LLM,
+  instrucciones, cards HTML) contra la salida real del CLI.
+- `test_canario_orquestacion.py` — detecta cambios en la orquestación de
+  main.py que requieren sincronizar la réplica.
+- `test_conversation_store.py` — historial sliding window.
 
 ## Divergencias deliberadas con el CLI (mínimas e inevitables)
 
