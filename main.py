@@ -1635,8 +1635,8 @@ def ciclo_consultas(
         # Solo pasa la última entrada al rewriter para evitar que el LLM elija
         # una query más antigua (y semánticamente "más relevante") en vez de la inmediata anterior.
         # Funciona porque las queries reescritas ya acumulan contexto acumulativo.
-        # Queries de más de 7 palabras son completas por sí solas — no necesitan reescritura.
-        if len(user_query.split()) > 7:
+        # Queries de más de 4 palabras son completas por sí solas — no necesitan reescritura.
+        if len(user_query.split()) > 4:
             user_query_efectiva = user_query
         else:
             user_query_efectiva = reescribir_consulta(_historial_reciente[-1:], user_query)

@@ -541,7 +541,7 @@ def _pipeline_consulta(session_key: str, session: dict, user_query: str) -> Flow
     bloques: list[Bloque] = [Bloque("status", "\n  Analizando su consulta...")]
 
     # Solo pasa la última entrada al rewriter (ver comentario en ciclo_consultas)
-    if len(user_query.split()) > 7:
+    if len(user_query.split()) > 4:
         user_query_efectiva = user_query
     else:
         user_query_efectiva = cli.reescribir_consulta(historial[-1:], user_query)
