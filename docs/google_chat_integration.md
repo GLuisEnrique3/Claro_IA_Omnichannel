@@ -83,11 +83,28 @@ uvicorn api:app --host 0.0.0.0 --port 8000 --workers 1
 
 `--workers 1` es obligatorio (ChromaDB PersistentClient + sesiones JSON locales).
 
-Prueba local sin Google Chat:
+### Pruebas SIN Google Chat (simulador interactivo)
+
+No se necesita Google Chat para probar: el webhook solo recibe/devuelve JSON
+con el formato de eventos de Chat. El simulador envía esos mismos eventos
+(`ADDED_TO_SPACE`, `MESSAGE`, `CARD_CLICKED`) y renderiza respuestas y botones:
 
 ```bash
-GOOGLE_CHAT_SKIP_AUTH=1 uvicorn api:app --port 8000 &
+# Terminal 1
+GOOGLE_CHAT_SKIP_AUTH=1 uvicorn api:app --port 8000 --workers 1
 
+# Terminal 2
+python scripts/simulador_google_chat.py
+```
+
+Dentro del simulador: texto normal = mensaje; `!valor` = click de botón
+(ej. `!S` clickea "Confirmar"). También sirve contra Cloud Run:
+`python scripts/simulador_google_chat.py --url https://<cloud-run>/google-chat/webhook`
+(requiere `GOOGLE_CHAT_SKIP_AUTH=1` en el servicio mientras se prueba).
+
+Alternativa con curl:
+
+```bash
 curl -X POST localhost:8000/google-chat/webhook -H "Content-Type: application/json" -d '{
   "type": "MESSAGE",
   "user": {"name": "users/111", "displayName": "Tester"},
