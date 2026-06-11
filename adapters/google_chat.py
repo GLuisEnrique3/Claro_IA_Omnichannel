@@ -26,6 +26,7 @@ import google.oauth2.id_token
 
 from core.guided_flow import FlowResult, OMITIR_SENTINEL, step
 from core.conversation_store import conversation_store
+from adapters.chat_render import render_chat
 
 router = APIRouter()
 
@@ -83,19 +84,22 @@ def _verificar_jwt_google(authorization: str) -> dict:
 def _render_mensaje(result: FlowResult, echo: str | None = None) -> dict:
     """
     Convierte un FlowResult en JSON de mensaje de Google Chat.
+    El contenido se formatea para Chat via adapters/chat_render.py (negritas,
+    sin decoración de terminal, debug oculto salvo FLOW_DEBUG=1).
     Texto ≤ 4000 chars → mensaje de texto simple; más largo → card con
     textParagraph (límite de texto simple de Chat: 4096 chars).
     Los botones sugeridos se agregan como card con buttonList.
     """
-    texto = result.texto
+    texto, cards_extra = render_chat(result)
     if echo:
-        texto = f"_{echo}_\n{texto}"
+        texto = f"_{echo}_\n\n{texto}" if texto else f"_{echo}_"
 
     mensaje: dict = {}
     cards: list[dict] = []
 
     if len(texto) <= _MAX_TEXTO_SIMPLE:
-        mensaje["text"] = texto
+        if texto:
+            mensaje["text"] = texto
     else:
         # Texto largo (p. ej. instrucciones) → card con párrafos
         widgets = []
@@ -105,6 +109,8 @@ def _render_mensaje(result: FlowResult, echo: str | None = None) -> dict:
             "cardId": "contenido",
             "card": {"sections": [{"widgets": widgets}]},
         })
+
+    cards.extend(cards_extra)
 
     if result.botones:
         botones_widgets = {
@@ -154,8 +160,10 @@ def _procesar_turno(session_key: str, texto: str) -> FlowResult:
     with _lock_de(session_key):
         resultado = step(session_key, texto)
         # Historial conversacional del ticket: sliding window de 10 turnos
-        # (user + assistant) por sesión. TTL 24h.
-        conversation_store.append(session_key, texto or "(inicio)", resultado.texto)
+        # (user + assistant) por sesión. TTL 24h. Se guarda lo que el usuario
+        # vio en Chat, no el render CLI.
+        texto_chat, _ = render_chat(resultado)
+        conversation_store.append(session_key, texto or "(inicio)", texto_chat)
         return resultado
 
 

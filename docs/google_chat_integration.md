@@ -25,6 +25,23 @@ orquestación basada en `input()`, e importa todo lo demás. Las funciones del
 CLI que imprimen directamente se ejecutan bajo un proxy de stdout por-contexto
 (`core/captura_stdout.py`) que captura su salida sin duplicar textos.
 
+### Render por canal (bloques semánticos)
+
+Cada paso del flujo retorna `Bloque`s con dos representaciones:
+
+- **`texto`** — réplica exacta del CLI (paridad verificable por tests).
+- **`kind` + `data`** — versión estructurada que cada canal renderiza a su manera.
+
+`adapters/chat_render.py` convierte los bloques al formato nativo de Chat:
+títulos en `*negrita*`, sin cajas `╔═╗` ni separadores `━━━`, prompts de
+terminal (`Opción:`, `Su consulta:`) eliminados, mensajes de progreso
+(`Analizando...`, `Procesando...`) omitidos (en chat llegan junto con el
+resultado), y documentos RAG como card aparte con fuente/similitud/extracto.
+
+**Debug**: las líneas `#--DEBUG` y el SQL generado están ocultos por defecto.
+Con `FLOW_DEBUG=1` vuelven a mostrarse (útil en el ambiente de pruebas para
+validar contra el CLI sin mirar logs).
+
 ### Máquina de estados (`core/guided_flow.py`)
 
 | Estado        | Espera                              | Equivalente CLI                      |
@@ -71,6 +88,7 @@ Keywords globales en cualquier estado (réplica de `_input()`): `salir`,
 |-------------------------|-------------------------------------------------------------------|
 | `GOOGLE_CHAT_AUDIENCE`  | Número de proyecto GCP de la app de Chat (audience del JWT)       |
 | `GOOGLE_CHAT_SKIP_AUTH` | `1` = omite verificación JWT (SOLO pruebas locales, nunca en GCP) |
+| `FLOW_DEBUG`            | `1` = muestra líneas `#--DEBUG` y SQL generado en las respuestas  |
 
 La verificación JWT usa los certificados de `chat@system.gserviceaccount.com`
 (Google Chat NO firma con los certs OAuth2 genéricos).

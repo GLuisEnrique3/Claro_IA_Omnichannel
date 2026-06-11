@@ -5,10 +5,14 @@ para canales conversacionales request/response (Google Chat).
 main.py NO se modifica: este módulo importa sus funciones (detección de caso
 de uso, extracción de entidades, ejecución SQL/RAG/multiple, etc.) y replica
 únicamente la orquestación basada en input()/print() como máquina de estados.
-Los textos de los prompts son copias EXACTAS de los prints del CLI; la salida
-de las funciones que imprimen directamente (ejecutar_consulta, ejecutar_rag,
-ejecutar_multiple, _mostrar_instrucciones, _header) se captura tal cual via
-core/captura_stdout.py para garantizar paridad sin duplicar textos.
+
+Cada paso retorna un FlowResult compuesto de Bloques semánticos:
+  - `texto` (CLI): copia EXACTA de lo que imprime el CLI — paridad verificable.
+  - `kind` + `data`: información estructurada para que cada canal renderice
+    a su manera (Google Chat usa adapters/chat_render.py).
+La salida de las funciones de main.py que imprimen directamente
+(ejecutar_consulta, ejecutar_rag, ejecutar_multiple, _mostrar_instrucciones,
+_header) se captura tal cual via core/captura_stdout.py.
 
 Estados:
     IDENT_TIPO   → espera opción 1/2/3 (tipo de usuario)
@@ -25,6 +29,7 @@ Divergencias deliberadas (mínimas) respecto al CLI:
     - "volver" fuera de la zona de confirmación crashea el CLI (VoverError no
       capturado); en chat se mapea al comportamiento amigable más cercano.
 """
+import re
 import time
 
 from dataclasses import dataclass, field
@@ -52,14 +57,32 @@ _loggers: dict[str, SessionLogger] = {}
 
 
 @dataclass
+class Bloque:
+    """
+    Unidad semántica de salida.
+    `texto` es la réplica EXACTA del CLI; `data` lleva la versión estructurada
+    para renders por canal (puede ser None si el texto basta).
+    """
+    kind: str
+    texto: str
+    data: dict | None = None
+
+
+@dataclass
 class FlowResult:
-    """Resultado de un paso del flujo: líneas a mostrar + botones sugeridos."""
-    lineas: list[str] = field(default_factory=list)
+    """Resultado de un paso del flujo: bloques semánticos + botones sugeridos."""
+    bloques: list[Bloque] = field(default_factory=list)
     botones: list[tuple[str, str]] | None = None
     terminado: bool = False
 
     @property
+    def lineas(self) -> list[str]:
+        """Render CLI línea a línea (paridad exacta con main.py)."""
+        return [linea for b in self.bloques for linea in b.texto.split("\n")]
+
+    @property
     def texto(self) -> str:
+        """Render CLI completo (paridad exacta con main.py)."""
         return "\n".join(self.lineas)
 
 
@@ -72,25 +95,32 @@ def _capturado(func, *args, **kwargs):
     return buf.getvalue().removesuffix("\n"), retorno
 
 
-def _lineas_header() -> list[str]:
+def _bloque_header() -> Bloque:
     salida, _ = _capturado(cli._header)
-    return [salida]
+    return Bloque("header", salida)
 
 
-def _lineas_menu_identificacion() -> list[str]:
+def _bloque_menu_identificacion() -> Bloque:
     lineas = ["🔐 IDENTIFICACIÓN DE USUARIO", _SEP, "Seleccione su tipo de usuario:"]
     for k, v in cli.TIPOS_USUARIO.items():
         lineas.append(f"  {k}. {v['nombre']}")
     lineas += ["", "Opción: "]
-    return lineas
+    return Bloque(
+        "ident_menu",
+        "\n".join(lineas),
+        data={"tipos": [(k, v["nombre"]) for k, v in cli.TIPOS_USUARIO.items()]},
+    )
 
 
 def _botones_identificacion() -> list[tuple[str, str]]:
     return [(f"{k}. {v['nombre']}", k) for k, v in cli.TIPOS_USUARIO.items()]
 
 
-def _lineas_menu_consulta() -> list[str]:
-    return [_SEP, "", "¿Qué desea consultar hoy?", "", "  Su consulta: "]
+def _bloque_menu_consulta() -> Bloque:
+    return Bloque(
+        "menu_consulta",
+        "\n".join([_SEP, "", "¿Qué desea consultar hoy?", "", "  Su consulta: "]),
+    )
 
 
 _PROMPT_CONFIRMAR = "  ¿Desea Confirmar? (S = confirmar / N = reformular filtros / Enter = omitir filtros): "
@@ -105,22 +135,22 @@ _BOTONES_CONFIRMAR = [
 ]
 
 
-def _prompt_actual(session: dict) -> tuple[list[str], list[tuple[str, str]] | None]:
+def _prompt_actual(session: dict) -> tuple[list[Bloque], list[tuple[str, str]] | None]:
     """Prompt + botones del estado actual (para re-preguntar tras un keyword global)."""
     estado = session.get("state")
     if estado == "IDENT_TIPO":
-        return ["Opción: "], _botones_identificacion()
+        return [Bloque("prompt_opcion", "Opción: ")], _botones_identificacion()
     if estado == "IDENT_VALOR":
         tipo = cli.TIPOS_USUARIO[session["tipo_key"]]
-        return [tipo["prompt_id"]], None
+        return [Bloque("prompt_valor", tipo["prompt_id"])], None
     if estado in ("QUERY", "REFORMULAR"):
-        return ["  Su consulta: "], None
+        return [Bloque("prompt_consulta", "  Su consulta: ")], None
     if estado == "CONFIRM":
-        return [_PROMPT_CONFIRMAR], _BOTONES_CONFIRMAR
+        return [Bloque("confirmar_prompt", _PROMPT_CONFIRMAR)], _BOTONES_CONFIRMAR
     if estado == "RETRY":
-        return [_PROMPT_RETRY], _BOTONES_SN
+        return [Bloque("retry_prompt", _PROMPT_RETRY)], _BOTONES_SN
     if estado == "OTRA":
-        return [_PROMPT_OTRA], _BOTONES_SN
+        return [Bloque("otra_prompt", _PROMPT_OTRA)], _BOTONES_SN
     return [], None
 
 
@@ -138,6 +168,76 @@ def _entidades_de_json(entidades: dict) -> dict:
     return {p: tuple(v) for p, v in (entidades or {}).items()}
 
 
+def _entidades_data(entidades: dict) -> list[dict]:
+    return [
+        {"label": v[2], "valor": v[0], "score": v[1]}
+        for v in entidades.values()
+    ]
+
+
+# ── Parsers de salida capturada (para data estructurada) ──────────────────────
+
+def _parse_rag_salida(salida: str) -> dict:
+    """
+    Extrae respuesta, documentos y carrier de la salida capturada de
+    ejecutar_rag(). Si el formato no coincide, cae a respuesta = salida cruda.
+    """
+    data: dict = {"respuesta": salida.strip(), "documentos": [], "carrier": None}
+
+    m_carrier = re.search(r"Carrier detectado: (.+)", salida)
+    if m_carrier:
+        data["carrier"] = m_carrier.group(1).strip()
+
+    idx = salida.rfind("RESPUESTA:\n")
+    if idx != -1:
+        resto = salida[idx + len("RESPUESTA:\n"):]
+        # Saltar la línea separadora (━━━)
+        partes = resto.split("\n", 1)
+        data["respuesta"] = (partes[1] if len(partes) > 1 else resto).strip()
+
+    # Cajas de documentos: ┌...│ 📌 DOCUMENTO n (Similitud: x%) │ Fuente: ... │ "extracto"
+    for caja in salida.split("┌")[1:]:
+        cuerpo = caja.split("└")[0]
+        lineas_caja = [
+            linea.strip().strip("│").strip()
+            for linea in cuerpo.split("\n")
+            if linea.strip().startswith("│")
+        ]
+        if not lineas_caja:
+            continue
+        doc: dict = {"similitud": None, "fuente": None, "extracto": ""}
+        m_sim = re.search(r"\(Similitud: ([\d.]+)%\)", lineas_caja[0])
+        if m_sim:
+            doc["similitud"] = float(m_sim.group(1))
+        cuerpo_extracto: list[str] = []
+        for linea in lineas_caja[1:]:
+            if linea.startswith("Fuente: "):
+                doc["fuente"] = linea.removeprefix("Fuente: ").strip()
+            elif linea:
+                cuerpo_extracto.append(linea)
+        doc["extracto"] = " ".join(cuerpo_extracto).strip().strip('"')
+        if doc["fuente"] or doc["extracto"]:
+            data["documentos"].append(doc)
+
+    return data
+
+
+def _parse_resultado_multiple(salida: str) -> dict:
+    """
+    Separa el bloque de debug (SQLs, progreso) de la respuesta final en la
+    salida capturada de ejecutar_multiple().
+    """
+    idx = salida.rfind("\nRESULTADO:\n")
+    if idx == -1:
+        return {"respuesta": salida.strip(), "debug": ""}
+    resto = salida[idx + len("\nRESULTADO:\n"):]
+    partes = resto.split("\n", 1)  # saltar la línea separadora
+    return {
+        "respuesta": (partes[1] if len(partes) > 1 else resto).strip(),
+        "debug": salida[:idx].strip("\n"),
+    }
+
+
 # ── Entrada principal ──────────────────────────────────────────────────────────
 
 def iniciar_sesion(session_key: str) -> FlowResult:
@@ -145,8 +245,10 @@ def iniciar_sesion(session_key: str) -> FlowResult:
     _get_logger(session_key, nuevo=True)
     session = {"state": "IDENT_TIPO"}
     session_store.save(session_key, session)
-    lineas = _lineas_header() + _lineas_menu_identificacion()
-    return FlowResult(lineas=lineas, botones=_botones_identificacion())
+    return FlowResult(
+        bloques=[_bloque_header(), _bloque_menu_identificacion()],
+        botones=_botones_identificacion(),
+    )
 
 
 def step(session_key: str, texto: str) -> FlowResult:
@@ -175,14 +277,19 @@ def _procesar(session_key: str, session: dict, texto: str) -> FlowResult:
 
     # ── Keywords globales — réplica de _input() en main.py ────────────────────
     if lower in cli._PALABRAS_SALIR:
-        return FlowResult(lineas=["", "Sesión finalizada. ¡Hasta pronto!"], terminado=True)
+        return FlowResult(
+            bloques=[Bloque("salir", "\nSesión finalizada. ¡Hasta pronto!")],
+            terminado=True,
+        )
 
     if lower in cli._PALABRAS_MENU:
         session.clear()
         session["state"] = "IDENT_TIPO"
-        lineas = ["", "  Volviendo a la identificación de usuario...", ""]
-        lineas += _lineas_menu_identificacion()
-        return FlowResult(lineas=lineas, botones=_botones_identificacion())
+        bloques = [
+            Bloque("nueva_sesion", "\n  Volviendo a la identificación de usuario...\n"),
+            _bloque_menu_identificacion(),
+        ]
+        return FlowResult(bloques=bloques, botones=_botones_identificacion())
 
     if lower in cli._PALABRAS_VOLVER:
         return _manejar_volver(session_key, session)
@@ -190,26 +297,26 @@ def _procesar(session_key: str, session: dict, texto: str) -> FlowResult:
     if lower in cli._PALABRAS_INSTRUCCIONES:
         salida, _ = _capturado(cli._mostrar_instrucciones)
         prompt, botones = _prompt_actual(session)
-        return FlowResult(lineas=[salida] + prompt, botones=botones)
+        return FlowResult(bloques=[Bloque("instrucciones", salida)] + prompt, botones=botones)
 
     if lower in cli._PALABRAS_ESCALAR:
         prompt, botones = _prompt_actual(session)
         return FlowResult(
-            lineas=["", "  Funcionalidad todavía en proceso.", ""] + prompt,
+            bloques=[Bloque("escalar", "\n  Funcionalidad todavía en proceso.\n")] + prompt,
             botones=botones,
         )
 
     if lower in cli._PALABRAS_SALUDO:
-        saludo = [
+        saludo = "\n".join([
             "",
             "  ¡Hola! Soy tu asistente de Claro Insurance.",
             "  Puedo ayudarte con consultas sobre contratos, comisiones y documentos normativos.",
             '  Escribe "instrucciones" para ver todo lo que puedes consultar.',
             "  ¡Quedo atento!",
             "",
-        ]
+        ])
         prompt, botones = _prompt_actual(session)
-        return FlowResult(lineas=saludo + prompt, botones=botones)
+        return FlowResult(bloques=[Bloque("saludo", saludo)] + prompt, botones=botones)
 
     # ── Dispatch por estado ────────────────────────────────────────────────────
     estado = session.get("state", "IDENT_TIPO")
@@ -232,7 +339,7 @@ def _procesar(session_key: str, session: dict, texto: str) -> FlowResult:
     session.clear()
     session["state"] = "IDENT_TIPO"
     return FlowResult(
-        lineas=_lineas_header() + _lineas_menu_identificacion(),
+        bloques=[_bloque_header(), _bloque_menu_identificacion()],
         botones=_botones_identificacion(),
     )
 
@@ -248,19 +355,27 @@ def _manejar_volver(session_key: str, session: dict) -> FlowResult:
         _get_logger(session_key).cerrar_consulta()
         session.pop("pendiente", None)
         session["state"] = "QUERY"
-        lineas = ["", "  Volviendo al menú principal...", ""] + _lineas_menu_consulta()
-        return FlowResult(lineas=lineas)
+        bloques = [
+            Bloque("volver", "\n  Volviendo al menú principal...\n"),
+            _bloque_menu_consulta(),
+        ]
+        return FlowResult(bloques=bloques)
 
     if estado in ("IDENT_TIPO", "IDENT_VALOR"):
         session.clear()
         session["state"] = "IDENT_TIPO"
-        lineas = ["", "  Volviendo a la identificación de usuario...", ""]
-        lineas += _lineas_menu_identificacion()
-        return FlowResult(lineas=lineas, botones=_botones_identificacion())
+        bloques = [
+            Bloque("nueva_sesion", "\n  Volviendo a la identificación de usuario...\n"),
+            _bloque_menu_identificacion(),
+        ]
+        return FlowResult(bloques=bloques, botones=_botones_identificacion())
 
     session["state"] = "QUERY"
-    lineas = ["", "  Volviendo al menú principal...", ""] + _lineas_menu_consulta()
-    return FlowResult(lineas=lineas)
+    bloques = [
+        Bloque("volver", "\n  Volviendo al menú principal...\n"),
+        _bloque_menu_consulta(),
+    ]
+    return FlowResult(bloques=bloques)
 
 
 # ── Identificación ─────────────────────────────────────────────────────────────
@@ -268,9 +383,11 @@ def _manejar_volver(session_key: str, session: dict) -> FlowResult:
 def _handle_ident_tipo(session_key: str, session: dict, texto: str) -> FlowResult:
     opcion = texto.strip()
     if opcion not in cli.TIPOS_USUARIO:
-        lineas = ["⚠  Opción no válida. Intente nuevamente.", ""]
-        lineas += _lineas_menu_identificacion()
-        return FlowResult(lineas=lineas, botones=_botones_identificacion())
+        bloques = [
+            Bloque("invalida", "⚠  Opción no válida. Intente nuevamente.\n"),
+            _bloque_menu_identificacion(),
+        ]
+        return FlowResult(bloques=bloques, botones=_botones_identificacion())
 
     tipo = cli.TIPOS_USUARIO[opcion]
     session["tipo_key"] = opcion
@@ -280,12 +397,14 @@ def _handle_ident_tipo(session_key: str, session: dict, texto: str) -> FlowResul
 
     candidatos = cli.FILTROS_VALIDOS.get(tipo["filtro_key"], [])
     if not candidatos:
-        lineas = [f"⚠  Sin registros en filtro '{tipo['filtro_key']}'. Contacte al administrador.", ""]
-        lineas += _lineas_menu_identificacion()
-        return FlowResult(lineas=lineas, botones=_botones_identificacion())
+        bloques = [
+            Bloque("invalida", f"⚠  Sin registros en filtro '{tipo['filtro_key']}'. Contacte al administrador.\n"),
+            _bloque_menu_identificacion(),
+        ]
+        return FlowResult(bloques=bloques, botones=_botones_identificacion())
 
     session["state"] = "IDENT_VALOR"
-    return FlowResult(lineas=[tipo["prompt_id"]])
+    return FlowResult(bloques=[Bloque("prompt_valor", tipo["prompt_id"])])
 
 
 def _handle_ident_valor(session_key: str, session: dict, texto: str) -> FlowResult:
@@ -294,7 +413,10 @@ def _handle_ident_valor(session_key: str, session: dict, texto: str) -> FlowResu
     valor_input = texto.strip()
 
     if not valor_input:
-        return FlowResult(lineas=["⚠  El campo no puede estar vacío.", "", tipo["prompt_id"]])
+        return FlowResult(bloques=[
+            Bloque("invalida", "⚠  El campo no puede estar vacío.\n"),
+            Bloque("prompt_valor", tipo["prompt_id"]),
+        ])
 
     candidatos = cli.FILTROS_VALIDOS.get(tipo["filtro_key"], [])
     embs_pre = cli.FILTROS_EMBEDDINGS.get(tipo["filtro_key"], {}).get("embeddings")
@@ -302,14 +424,16 @@ def _handle_ident_valor(session_key: str, session: dict, texto: str) -> FlowResu
     match, score = cli._buscar_semantico(valor_input, candidatos, tipo["umbral"], embs_pre)
 
     if not match:
-        lineas = [
-            f"⚠  Sin coincidencia para '{valor_input}' "
-            f"(mejor similitud: {score:.2f}, umbral: {tipo['umbral']:.2f}).\n"
-            "   Verifique e intente nuevamente.",
-            "",
-            tipo["prompt_id"],
+        bloques = [
+            Bloque(
+                "ident_error",
+                f"⚠  Sin coincidencia para '{valor_input}' "
+                f"(mejor similitud: {score:.2f}, umbral: {tipo['umbral']:.2f}).\n"
+                "   Verifique e intente nuevamente.\n",
+            ),
+            Bloque("prompt_valor", tipo["prompt_id"]),
         ]
-        return FlowResult(lineas=lineas)
+        return FlowResult(bloques=bloques)
 
     return _completar_identificacion(session_key, session, tipo_key, tipo["nombre"], match, score)
 
@@ -347,20 +471,19 @@ def _completar_identificacion(
         """).result())
         agency_name = rows[0]["Name_Agencies"] if rows else None
 
-    lineas = [""]
     if valor_id and score is not None:
         if tipo_key == "2" and agency_name:
-            lineas.append(
+            bienvenida = (
                 f'✅ Bienvenido, el sistema ha reconocido tu ingreso "NPN:{valor_id}", '
                 f'"Agencia:{agency_name}", nivel de coincidencia {score:.2f}'
             )
         else:
-            lineas.append(
+            bienvenida = (
                 f'✅ Bienvenido, el sistema ha reconocido tu ingreso "{valor_id}", '
                 f"nivel de coincidencia {score:.2f}"
             )
     else:
-        lineas.append(f"✅ Bienvenido, {nombre_tipo}")
+        bienvenida = f"✅ Bienvenido, {nombre_tipo}"
 
     _perms = cli._CATALOG_PERMS.get(tipo_key)
     catalogos = [c for c in tipo["catalogos"] if c in _perms] if _perms else tipo["catalogos"]
@@ -378,15 +501,18 @@ def _completar_identificacion(
         "historial_reciente": [],
     })
 
-    lineas += _lineas_menu_consulta()
-    return FlowResult(lineas=lineas)
+    bloques = [Bloque("bienvenida", "\n" + bienvenida), _bloque_menu_consulta()]
+    return FlowResult(bloques=bloques)
 
 
 # ── Ciclo de consultas (réplica de ciclo_consultas) ────────────────────────────
 
 def _handle_query(session_key: str, session: dict, texto: str) -> FlowResult:
     if not texto:
-        return FlowResult(lineas=["  Por favor ingrese una consulta."] + _lineas_menu_consulta())
+        return FlowResult(bloques=[
+            Bloque("invalida", "  Por favor ingrese una consulta."),
+            _bloque_menu_consulta(),
+        ])
     return _pipeline_consulta(session_key, session, texto)
 
 
@@ -412,7 +538,7 @@ def _pipeline_consulta(session_key: str, session: dict, user_query: str) -> Flow
         {"role": "user", "content": c} for c in session.get("historial_reciente", [])
     ]
 
-    lineas = ["", "  Analizando su consulta..."]
+    bloques: list[Bloque] = [Bloque("status", "\n  Analizando su consulta...")]
 
     # Solo pasa la última entrada al rewriter (ver comentario en ciclo_consultas)
     if len(user_query.split()) > 7:
@@ -420,14 +546,14 @@ def _pipeline_consulta(session_key: str, session: dict, user_query: str) -> Flow
     else:
         user_query_efectiva = cli.reescribir_consulta(historial[-1:], user_query)
     if user_query_efectiva != user_query:
-        lineas.append(f"  #--DEBUG Consulta reescrita: {user_query_efectiva}")
+        bloques.append(Bloque("debug", f"  #--DEBUG Consulta reescrita: {user_query_efectiva}"))
 
     _t = time.perf_counter()
     normalized = cli.transformar_consulta_con_llm(user_query_efectiva)
     q.latencia_normalizacion_ms = int((time.perf_counter() - _t) * 1000)
     q.query_normalizado = normalized
 
-    lineas.append(f"  #--DEBUG Pregunta Formateada: {normalized}")
+    bloques.append(Bloque("debug", f"  #--DEBUG Pregunta Formateada: {normalized}"))
 
     _t = time.perf_counter()
     use_case_entry, score = cli.detectar_caso_de_uso(normalized, catalogos)
@@ -436,16 +562,14 @@ def _pipeline_consulta(session_key: str, session: dict, user_query: str) -> Flow
     q.caso_exitoso = use_case_entry is not None
 
     if use_case_entry is None:
-        lineas += [
-            "",
-            "  No fue posible identificar un flujo asociado a su solicitud. Puede reformular su mensaje para intentar nuevamente el proceso automatizado, o escalar su caso a un agente humano para obtener asistencia personalizada.",
-            "",
-            "  Por favor reformule su consulta con más detalle.",
-        ]
+        bloques.append(Bloque(
+            "no_flujo",
+            "\n  No fue posible identificar un flujo asociado a su solicitud. Puede reformular su mensaje para intentar nuevamente el proceso automatizado, o escalar su caso a un agente humano para obtener asistencia personalizada.\n\n  Por favor reformule su consulta con más detalle.",
+        ))
         q.reiniciar_timer()  # excluir el tiempo de espera del usuario al decidir si reintenta
         session["state"] = "RETRY"
-        lineas.append(_PROMPT_RETRY)
-        return FlowResult(lineas=lineas, botones=_BOTONES_SN)
+        bloques.append(Bloque("retry_prompt", _PROMPT_RETRY))
+        return FlowResult(bloques=bloques, botones=_BOTONES_SN)
 
     nombre_caso = use_case_entry["nombre"]
     pregunta = use_case_entry["pregunta"]
@@ -470,10 +594,11 @@ def _pipeline_consulta(session_key: str, session: dict, user_query: str) -> Flow
             for p, v in entidades_previas.items()
         ]
 
-    lineas += [
+    flujo_lineas = [
         "",
         f'  Se ha identificado el flujo: "{nombre_caso}" - (Nivel de coincidencia: {score:.2f})',
     ]
+    flujo_data: dict = {"nombre": nombre_caso, "score": score, "entidades": [], "multiple": None}
 
     if tipo_pregunta == "multiple":
         catalogo_actual = cli.USE_CASES["options"].get(use_case_entry["catalogo"], {})
@@ -483,9 +608,9 @@ def _pipeline_consulta(session_key: str, session: dict, user_query: str) -> Flow
             for i in pregunta.get("invoca", [])
             if i in preguntas_map_actual
         ]
-        lineas.append(f"  Se ejecutarán {len(invoca_nombres)} consultas en paralelo:")
+        flujo_lineas.append(f"  Se ejecutarán {len(invoca_nombres)} consultas en paralelo:")
         for n in invoca_nombres:
-            lineas.append(f"      • {n}")
+            flujo_lineas.append(f"      • {n}")
         # Extraer entidades por sub-caso y mostrar agrupadas (usa la query ORIGINAL)
         sub_pqs = [preguntas_map_actual[i] for i in pregunta.get("invoca", []) if i in preguntas_map_actual]
         entidades_por_subcaso: dict = {}
@@ -494,14 +619,17 @@ def _pipeline_consulta(session_key: str, session: dict, user_query: str) -> Flow
                 entidades_por_subcaso[sp["texto"]] = cli.extraer_entidades(
                     user_query, sp["parametros"], filtro_fijo_key
                 )
-        lineas.append("")
+        flujo_lineas.append("")
+        subcasos_data = []
         for nombre_sp, ents in entidades_por_subcaso.items():
-            lineas.append(f"  Entidades detectadas [{nombre_sp}]:")
+            flujo_lineas.append(f"  Entidades detectadas [{nombre_sp}]:")
             if ents:
                 for _, (val, sc_e, lbl, _snip) in ents.items():
-                    lineas.append(f"      • {lbl:<20} → {val}  (confianza: {sc_e:.2f})")
+                    flujo_lineas.append(f"      • {lbl:<20} → {val}  (confianza: {sc_e:.2f})")
             else:
-                lineas.append(f"      (ninguna)")
+                flujo_lineas.append(f"      (ninguna)")
+            subcasos_data.append({"nombre": nombre_sp, "entidades": _entidades_data(ents)})
+        flujo_data["multiple"] = {"invoca_nombres": invoca_nombres, "subcasos": subcasos_data}
         # Fusionar para ejecución (sin duplicados, el primero gana)
         entidades_previas = {}
         for ents in entidades_por_subcaso.values():
@@ -514,11 +642,14 @@ def _pipeline_consulta(session_key: str, session: dict, user_query: str) -> Flow
                 for p, v in entidades_previas.items()
             ]
     elif entidades_previas:
-        lineas.append("  Con las siguientes entidades:")
+        flujo_lineas.append("  Con las siguientes entidades:")
         for _, (val, sc_e, lbl, _snip) in entidades_previas.items():
-            lineas.append(f"      • {lbl:<20} → {val}  (confianza: {sc_e:.2f})")
+            flujo_lineas.append(f"      • {lbl:<20} → {val}  (confianza: {sc_e:.2f})")
+        flujo_data["entidades"] = _entidades_data(entidades_previas)
     else:
-        lineas.append("  Sin ninguna entidad detectada.")
+        flujo_lineas.append("  Sin ninguna entidad detectada.")
+
+    bloques.append(Bloque("flujo", "\n".join(flujo_lineas), data=flujo_data))
 
     q.tipo_ejecucion = tipo_pregunta
 
@@ -527,15 +658,15 @@ def _pipeline_consulta(session_key: str, session: dict, user_query: str) -> Flow
     if filtros_req_pre and tipo_pregunta != "rag" and not all(p in entidades_previas for p in filtros_req_pre):
         labels_req_pre = [cli.PARAM_TO_FILTRO[p][1] for p in filtros_req_pre if p in cli.PARAM_TO_FILTRO]
         lbl_slash_pre = "/".join(labels_req_pre)
-        lineas += [
-            "",
-            f"  Esta consulta requiere identificar los siguientes filtros/entidades ({lbl_slash_pre}),",
-            "  por favor reformule su pregunta considerando dichos filtros",
-            "",
-            "  Su consulta: ",
-        ]
+        bloques.append(Bloque(
+            "filtros_requeridos",
+            f"\n  Esta consulta requiere identificar los siguientes filtros/entidades ({lbl_slash_pre}),"
+            "\n  por favor reformule su pregunta considerando dichos filtros"
+            "\n\n  Su consulta: ",
+            data={"labels": lbl_slash_pre},
+        ))
         session["state"] = "REFORMULAR"
-        return FlowResult(lineas=lineas)
+        return FlowResult(bloques=bloques)
 
     session["state"] = "CONFIRM"
     session["pendiente"] = {
@@ -546,8 +677,8 @@ def _pipeline_consulta(session_key: str, session: dict, user_query: str) -> Flow
         "user_query": user_query,
         "entidades": _entidades_a_json(entidades_previas),
     }
-    lineas += ["", _PROMPT_CONFIRMAR]
-    return FlowResult(lineas=lineas, botones=_BOTONES_CONFIRMAR)
+    bloques.append(Bloque("confirmar_prompt", "\n" + _PROMPT_CONFIRMAR))
+    return FlowResult(bloques=bloques, botones=_BOTONES_CONFIRMAR)
 
 
 def _handle_confirm(session_key: str, session: dict, texto: str) -> FlowResult:
@@ -556,8 +687,11 @@ def _handle_confirm(session_key: str, session: dict, texto: str) -> FlowResult:
         respuesta = ""
 
     if respuesta not in ("S", "N", ""):
-        lineas = ["  ⚠  Opción no válida. Por favor ingrese: S / N / Enter.", "", _PROMPT_CONFIRMAR]
-        return FlowResult(lineas=lineas, botones=_BOTONES_CONFIRMAR)
+        bloques = [
+            Bloque("invalida", "  ⚠  Opción no válida. Por favor ingrese: S / N / Enter.\n"),
+            Bloque("confirmar_prompt", _PROMPT_CONFIRMAR),
+        ]
+        return FlowResult(bloques=bloques, botones=_BOTONES_CONFIRMAR)
 
     logger = _get_logger(session_key)
 
@@ -566,8 +700,11 @@ def _handle_confirm(session_key: str, session: dict, texto: str) -> FlowResult:
         logger.cerrar_consulta()
         session.pop("pendiente", None)
         session["state"] = "QUERY"
-        lineas = ["", "  Volviendo al menú principal...", ""] + _lineas_menu_consulta()
-        return FlowResult(lineas=lineas)
+        bloques = [
+            Bloque("volver", "\n  Volviendo al menú principal...\n"),
+            _bloque_menu_consulta(),
+        ]
+        return FlowResult(bloques=bloques)
 
     return _ejecutar_pendiente(session_key, session, confirmar=respuesta)
 
@@ -576,7 +713,7 @@ def _ejecutar_pendiente(session_key: str, session: dict, confirmar: str) -> Flow
     pendiente = session.pop("pendiente", None)
     session["state"] = "QUERY"
     if not pendiente:
-        return FlowResult(lineas=_lineas_menu_consulta())
+        return FlowResult(bloques=[_bloque_menu_consulta()])
 
     logger = _get_logger(session_key)
     q = logger.current
@@ -598,75 +735,85 @@ def _ejecutar_pendiente(session_key: str, session: dict, confirmar: str) -> Flow
     tipo_key = session.get("tipo_key", "3")
     agency_name = session.get("agency_name")
 
-    lineas: list[str] = []
+    bloques: list[Bloque] = []
 
     # Reiniciar timer: excluir el tiempo que el usuario tardó en confirmar
     q.reiniciar_timer()
 
     if tipo_pregunta == "multiple":
-        lineas += ["", "  Procesando su consulta, por favor espere..."]
+        bloques.append(Bloque("procesando", "\n  Procesando su consulta, por favor espere..."))
         salida, _ = _capturado(
             cli.ejecutar_multiple,
             pregunta, pendiente["catalogo"], sql_filtro, filtro_fijo_key, user_query,
             entidades_previas, tipo_key=tipo_key, agency_name=agency_name,
         )
-        lineas.append(salida)
+        bloques.append(Bloque("multiple_exec", salida, data=_parse_resultado_multiple(salida)))
     elif tipo_pregunta == "rag":
         salida, _ = _capturado(
             cli.ejecutar_rag,
             pregunta, user_query, query_log=q, agency_name=agency_name, tipo_key=tipo_key,
         )
-        lineas.append(salida)
+        bloques.append(Bloque("rag", salida, data=_parse_rag_salida(salida)))
     else:
         texto_usuario = user_query if confirmar == "S" else ""
         entidades = entidades_previas if confirmar == "S" else {}
 
-        lineas += ["", "  Procesando su consulta, por favor espere..."]
+        bloques.append(Bloque("procesando", "\n  Procesando su consulta, por favor espere..."))
         salida, respuesta = _capturado(
             cli.ejecutar_consulta,
             pregunta, sql_filtro, entidades, texto_usuario, query_log=q, tipo_key=tipo_key,
         )
         if salida:
-            lineas.append(salida)
-        lineas += ["", "RESULTADO:", _SEP, respuesta]
+            bloques.append(Bloque("sql_debug", salida))
+        bloques.append(Bloque(
+            "resultado",
+            "\nRESULTADO:\n" + _SEP + "\n" + respuesta,
+            data={"respuesta": respuesta},
+        ))
 
     logger.cerrar_consulta()
 
     session["state"] = "OTRA"
-    lineas += ["", _PROMPT_OTRA]
-    return FlowResult(lineas=lineas, botones=_BOTONES_SN)
+    bloques.append(Bloque("otra_prompt", "\n" + _PROMPT_OTRA))
+    return FlowResult(bloques=bloques, botones=_BOTONES_SN)
 
 
 def _handle_retry(session_key: str, session: dict, texto: str) -> FlowResult:
     respuesta = texto.strip().upper()
     if respuesta not in ("S", "N"):
-        lineas = ["  ⚠  Opción no válida. Por favor ingrese: S / N.", "", _PROMPT_RETRY]
-        return FlowResult(lineas=lineas, botones=_BOTONES_SN)
+        bloques = [
+            Bloque("invalida", "  ⚠  Opción no válida. Por favor ingrese: S / N.\n"),
+            Bloque("retry_prompt", _PROMPT_RETRY),
+        ]
+        return FlowResult(bloques=bloques, botones=_BOTONES_SN)
 
     logger = _get_logger(session_key)
     logger.cerrar_consulta()
 
     if respuesta != "S":
         return FlowResult(
-            lineas=["", "Gracias por utilizar el Sistema de Consultas IA. ¡Hasta pronto!"],
+            bloques=[Bloque("despedida", "\nGracias por utilizar el Sistema de Consultas IA. ¡Hasta pronto!")],
             terminado=True,
         )
 
     session["state"] = "QUERY"
-    return FlowResult(lineas=_lineas_menu_consulta())
+    return FlowResult(bloques=[_bloque_menu_consulta()])
 
 
 def _handle_otra(session_key: str, session: dict, texto: str) -> FlowResult:
     respuesta = texto.strip().upper()
     if respuesta not in ("S", "N"):
-        lineas = ["  ⚠  Opción no válida. Por favor ingrese: S / N.", "", _PROMPT_OTRA]
-        return FlowResult(lineas=lineas, botones=_BOTONES_SN)
+        bloques = [
+            Bloque("invalida", "  ⚠  Opción no válida. Por favor ingrese: S / N.\n"),
+            Bloque("otra_prompt", _PROMPT_OTRA),
+        ]
+        return FlowResult(bloques=bloques, botones=_BOTONES_SN)
 
     if respuesta != "S":
         return FlowResult(
-            lineas=["", "Gracias por utilizar el Sistema de Consultas IA. ¡Hasta pronto!"],
+            bloques=[Bloque("despedida", "\nGracias por utilizar el Sistema de Consultas IA. ¡Hasta pronto!")],
             terminado=True,
         )
 
     session["state"] = "QUERY"
-    return FlowResult(lineas=[""] + _lineas_menu_consulta())
+    return FlowResult(bloques=[Bloque("salto", ""), _bloque_menu_consulta()])
