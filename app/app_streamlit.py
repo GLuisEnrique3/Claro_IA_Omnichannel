@@ -20,9 +20,9 @@ from main import (
     reescribir_consulta,
     detectar_caso_de_uso,
     extraer_entidades,
-    ejecutar_consulta,
 )
 from app.engine import sql_response, rag_response, multiple_response
+from config import client
 from config.logger import SessionLogger
 
 st.set_page_config(
@@ -144,6 +144,7 @@ def _init_state():
         "sql_filtro": None,
         "catalogos": [],
         "usuario_valor": None,
+        "agency_name": None,
         "messages": [],
         "pending": None,
         "debug_info": {},
@@ -171,9 +172,14 @@ def _ejecutar_pending(pending: dict, query_log=None) -> tuple[str, dict]:
     pregunta = use_case_entry["pregunta"]
     tipo = pregunta.get("tipo")
     debug_extra: dict = {}
+    tipo_key = st.session_state.tipo_key
+    agency_name = st.session_state.agency_name
 
     if tipo == "rag":
-        texto = rag_response(pregunta, pending["user_query"], query_log=query_log, debug_out=debug_extra)
+        texto = rag_response(
+            pregunta, pending["user_query"], query_log=query_log, debug_out=debug_extra,
+            agency_name=agency_name, tipo_key=tipo_key,
+        )
         return texto, debug_extra
     elif tipo == "multiple":
         texto = multiple_response(
@@ -184,6 +190,8 @@ def _ejecutar_pending(pending: dict, query_log=None) -> tuple[str, dict]:
             pending["user_query"],
             pending["entidades"],
             debug_out=debug_extra,
+            tipo_key=tipo_key,
+            agency_name=agency_name,
         )
         return texto, debug_extra
     else:
@@ -194,6 +202,7 @@ def _ejecutar_pending(pending: dict, query_log=None) -> tuple[str, dict]:
             pending["user_query"],
             query_log=query_log,
             debug_out=debug_extra,
+            tipo_key=tipo_key,
         )
         return texto, debug_extra
 
@@ -304,6 +313,22 @@ def show_login():
             if match:
                 valor_seguro = match.replace("'", "''")
                 sql_filtro = tipo["sql_filtro"].replace("{valor}", valor_seguro) if tipo["sql_filtro"] else None
+
+                # Resolver agencia del usuario (para filtros de RAG por agencia)
+                agency_name = None
+                if tipo_key == "1":
+                    agency_name = match
+                elif tipo_key == "2":
+                    with st.spinner("Resolviendo agencia..."):
+                        rows = list(client.query(f"""
+                            SELECT a.Name_Agencies
+                            FROM `claroinsurance-dataplatform.salesforce_claro.contact` c
+                            LEFT JOIN `claroinsurance-dataplatform.claro_bi.dim_account_2` a ON a.Id = c.AccountId
+                            WHERE c.NPN__c = '{valor_seguro}'
+                            LIMIT 1
+                        """).result())
+                    agency_name = rows[0]["Name_Agencies"] if rows else None
+
                 logger = SessionLogger()
                 logger.registrar_identificacion(tipo["nombre"], match, score)
                 st.session_state.update({
@@ -314,6 +339,7 @@ def show_login():
                     "sql_filtro": sql_filtro,
                     "catalogos": catalogos_disponibles,
                     "usuario_valor": match,
+                    "agency_name": agency_name,
                     "session_logger": logger,
                 })
                 st.rerun()

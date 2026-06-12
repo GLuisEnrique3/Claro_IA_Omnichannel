@@ -594,9 +594,12 @@ def _pipeline_consulta(session_key: str, session: dict, user_query: str) -> Flow
             for p, v in entidades_previas.items()
         ]
 
+    # Réplica de main.py: el CLI ya solo muestra el flujo identificado — los
+    # detalles de entidades y consultas paralelas se omiten de la interfaz,
+    # pero se conservan en flujo_data para debug/tracking.
     flujo_lineas = [
         "",
-        f'  Se ha identificado el flujo: "{nombre_caso}" - (Nivel de coincidencia: {score:.2f})',
+        f"  Tu pregunta se ha identificado mediante el flujo: {nombre_caso} con un nivel de coincidencia del {score:.2f}%.",
     ]
     flujo_data: dict = {"nombre": nombre_caso, "score": score, "entidades": [], "multiple": None}
 
@@ -608,10 +611,7 @@ def _pipeline_consulta(session_key: str, session: dict, user_query: str) -> Flow
             for i in pregunta.get("invoca", [])
             if i in preguntas_map_actual
         ]
-        flujo_lineas.append(f"  Se ejecutarán {len(invoca_nombres)} consultas en paralelo:")
-        for n in invoca_nombres:
-            flujo_lineas.append(f"      • {n}")
-        # Extraer entidades por sub-caso y mostrar agrupadas (usa la query ORIGINAL)
+        # Extraer entidades por sub-caso (usa la query ORIGINAL) — solo para data
         sub_pqs = [preguntas_map_actual[i] for i in pregunta.get("invoca", []) if i in preguntas_map_actual]
         entidades_por_subcaso: dict = {}
         for sp in sub_pqs:
@@ -619,35 +619,15 @@ def _pipeline_consulta(session_key: str, session: dict, user_query: str) -> Flow
                 entidades_por_subcaso[sp["texto"]] = cli.extraer_entidades(
                     user_query, sp["parametros"], filtro_fijo_key
                 )
-        flujo_lineas.append("")
-        subcasos_data = []
-        for nombre_sp, ents in entidades_por_subcaso.items():
-            flujo_lineas.append(f"  Entidades detectadas [{nombre_sp}]:")
-            if ents:
-                for _, (val, sc_e, lbl, _snip) in ents.items():
-                    flujo_lineas.append(f"      • {lbl:<20} → {val}  (confianza: {sc_e:.2f})")
-            else:
-                flujo_lineas.append(f"      (ninguna)")
-            subcasos_data.append({"nombre": nombre_sp, "entidades": _entidades_data(ents)})
+        subcasos_data = [
+            {"nombre": nombre_sp, "entidades": _entidades_data(ents)}
+            for nombre_sp, ents in entidades_por_subcaso.items()
+        ]
         flujo_data["multiple"] = {"invoca_nombres": invoca_nombres, "subcasos": subcasos_data}
-        # Fusionar para ejecución (sin duplicados, el primero gana)
-        entidades_previas = {}
-        for ents in entidades_por_subcaso.values():
-            for param, val in ents.items():
-                if param not in entidades_previas:
-                    entidades_previas[param] = val
-        if entidades_previas:
-            q.entidades = [
-                {"param": p, "label": v[2], "valor": v[0], "score": v[1]}
-                for p, v in entidades_previas.items()
-            ]
+        # Fusión de entidades desactivada — réplica del bloque comentado en main.py:
+        # entidades_previas queda vacío y ejecutar_multiple re-extrae internamente.
     elif entidades_previas:
-        flujo_lineas.append("  Con las siguientes entidades:")
-        for _, (val, sc_e, lbl, _snip) in entidades_previas.items():
-            flujo_lineas.append(f"      • {lbl:<20} → {val}  (confianza: {sc_e:.2f})")
         flujo_data["entidades"] = _entidades_data(entidades_previas)
-    else:
-        flujo_lineas.append("  Sin ninguna entidad detectada.")
 
     bloques.append(Bloque("flujo", "\n".join(flujo_lineas), data=flujo_data))
 

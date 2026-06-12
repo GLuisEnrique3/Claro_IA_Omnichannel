@@ -1305,7 +1305,7 @@ def ejecutar_rag(
     if not docs:
         print("   No se encontraron documentos relacionados con tu consulta.")
         return
-
+    """
     print(f"📄 RESULTADOS ENCONTRADOS (Top {len(docs)}):")
     print()
     for i, (doc, meta, dist) in enumerate(zip(docs, metas, dists), 1):
@@ -1326,6 +1326,7 @@ def ejecutar_rag(
             print(_box_line(line))
         print(f"└{border}┘")
         print()
+    """
 
     contexto_completo = "\n\n---\n\n".join(docs)
     entity_resolution = pregunta_config.get("entity_resolution", "")
@@ -1551,7 +1552,7 @@ def ejecutar_multiple(
         return {p: v for p, v in entidades_combinadas.items() if p in sp_params}
 
     print()
-    print(f"  Ejecutando {len(sub_preguntas)} consultas en paralelo...")
+    #print(f"  Ejecutando {len(sub_preguntas)} consultas en paralelo...")
 
     resultados: dict = {}
     with ThreadPoolExecutor(max_workers=len(sub_preguntas)) as executor:
@@ -1701,7 +1702,8 @@ def ciclo_consultas(
 
         # Mostrar flujo identificado + sub-casos o entidades según el tipo
         print()
-        print(f'  Se ha identificado el flujo: "{nombre_caso}" - (Nivel de coincidencia: {score:.2f})')
+#       print(f'  Se ha identificado el flujo: "{nombre_caso}" - (Nivel de coincidencia: {score:.2f})')
+        print(f'  Tu pregunta se ha identificado mediante el flujo: {nombre_caso} con un nivel de coincidencia del {score:.2f}%.')
 
         if tipo_pregunta == "multiple":
             catalogo_actual = USE_CASES["options"].get(use_case_entry["catalogo"], {})
@@ -1711,9 +1713,9 @@ def ciclo_consultas(
                 for i in pregunta.get("invoca", [])
                 if i in preguntas_map_actual
             ]
-            print(f"  Se ejecutarán {len(invoca_nombres)} consultas en paralelo:")
-            for n in invoca_nombres:
-                print(f"      • {n}")
+            #print(f"  Se ejecutarán {len(invoca_nombres)} consultas en paralelo:")
+            #for n in invoca_nombres:
+            #    print(f"      • {n}")
             # Extraer entidades por sub-caso y mostrar agrupadas
             sub_pqs = [preguntas_map_actual[i] for i in pregunta.get("invoca", []) if i in preguntas_map_actual]
             entidades_por_subcaso: dict = {}
@@ -1722,31 +1724,31 @@ def ciclo_consultas(
                     entidades_por_subcaso[sp["texto"]] = extraer_entidades(
                         user_query, sp["parametros"], filtro_fijo_key
                     )
-            print()
-            for nombre_sp, ents in entidades_por_subcaso.items():
-                print(f"  Entidades detectadas [{nombre_sp}]:")
-                if ents:
-                    for _, (val, sc_e, lbl, _) in ents.items():
-                        print(f"      • {lbl:<20} → {val}  (confianza: {sc_e:.2f})")
-                else:
-                    print(f"      (ninguna)")
+            #print()
+            #for nombre_sp, ents in entidades_por_subcaso.items():
+            #    print(f"  Entidades detectadas [{nombre_sp}]:")
+            #    if ents:
+            #        for _, (val, sc_e, lbl, _) in ents.items():
+            #            print(f"      • {lbl:<20} → {val}  (confianza: {sc_e:.2f})")
+            #    else:
+            #        print(f"      (ninguna)")
             # Fusionar para ejecución (sin duplicados, el primero gana)
-            entidades_previas = {}
-            for ents in entidades_por_subcaso.values():
-                for param, val in ents.items():
-                    if param not in entidades_previas:
-                        entidades_previas[param] = val
-            if entidades_previas:
-                q.entidades = [
-                    {"param": p, "label": v[2], "valor": v[0], "score": v[1]}
-                    for p, v in entidades_previas.items()
-                ]
-        elif entidades_previas:
-            print("  Con las siguientes entidades:")
-            for _, (val, sc_e, lbl, _) in entidades_previas.items():
-                print(f"      • {lbl:<20} → {val}  (confianza: {sc_e:.2f})")
-        else:
-            print("  Sin ninguna entidad detectada.")
+            #entidades_previas = {}
+            #for ents in entidades_por_subcaso.values():
+            #    for param, val in ents.items():
+            #        if param not in entidades_previas:
+            #            entidades_previas[param] = val
+            #if entidades_previas:
+            #    q.entidades = [
+            #        {"param": p, "label": v[2], "valor": v[0], "score": v[1]}
+            #        for p, v in entidades_previas.items()
+            #    ]
+        #elif entidades_previas:
+        #    print("  Con las siguientes entidades:")
+        #    for _, (val, sc_e, lbl, _) in entidades_previas.items():
+        #        print(f"      • {lbl:<20} → {val}  (confianza: {sc_e:.2f})")
+        #else:
+        #    print("  Sin ninguna entidad detectada.")
 
         q.tipo_ejecucion = tipo_pregunta
 
@@ -1771,7 +1773,7 @@ def ciclo_consultas(
             else:
                 print()
                 confirmar = _input_sn(
-                    "  ¿Desea Confirmar? (S = confirmar / N = reformular filtros / Enter = omitir filtros): ",
+                    " ¿Desea Confirmar? (S = confirmar / N = reformular pregunta): ",
                     con_enter=True,
                 )
                 if confirmar == "N":

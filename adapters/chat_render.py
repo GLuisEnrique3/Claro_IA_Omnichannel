@@ -92,28 +92,31 @@ def _fmt_flujo(b: Bloque) -> str:
     partes = [
         f"*Flujo identificado:* {data.get('nombre')} _(coincidencia: {data.get('score', 0):.2f})_"
     ]
-    multiple = data.get("multiple")
-    if multiple:
-        nombres = multiple.get("invoca_nombres", [])
-        partes.append(f"Se ejecutarán {len(nombres)} consultas en paralelo:")
-        partes += [f"• {n}" for n in nombres]
-        for sub in multiple.get("subcasos", []):
-            partes.append(f"\nEntidades detectadas [{sub['nombre']}]:")
-            if sub["entidades"]:
-                partes += [
-                    f"• {e['label']}: {e['valor']} _({e['score']:.2f})_"
-                    for e in sub["entidades"]
-                ]
-            else:
-                partes.append("_(ninguna)_")
-    elif data.get("entidades"):
-        partes.append("Entidades detectadas:")
-        partes += [
-            f"• {e['label']}: {e['valor']} _({e['score']:.2f})_"
-            for e in data["entidades"]
-        ]
-    else:
-        partes.append("_Sin ninguna entidad detectada._")
+    # Detalle de entidades/consultas paralelas solo en modo debug — el CLI
+    # dejó de mostrarlos al usuario final (commits de main 2026-06).
+    if _debug_activo():
+        multiple = data.get("multiple")
+        if multiple:
+            nombres = multiple.get("invoca_nombres", [])
+            partes.append(f"Se ejecutarán {len(nombres)} consultas en paralelo:")
+            partes += [f"• {n}" for n in nombres]
+            for sub in multiple.get("subcasos", []):
+                partes.append(f"\nEntidades detectadas [{sub['nombre']}]:")
+                if sub["entidades"]:
+                    partes += [
+                        f"• {e['label']}: {e['valor']} _({e['score']:.2f})_"
+                        for e in sub["entidades"]
+                    ]
+                else:
+                    partes.append("_(ninguna)_")
+        elif data.get("entidades"):
+            partes.append("Entidades detectadas:")
+            partes += [
+                f"• {e['label']}: {e['valor']} _({e['score']:.2f})_"
+                for e in data["entidades"]
+            ]
+        else:
+            partes.append("_Sin ninguna entidad detectada._")
     return "\n".join(partes)
 
 

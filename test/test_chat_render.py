@@ -93,7 +93,7 @@ class TestLimpieza:
 # ── Flujo identificado y resultado ─────────────────────────────────────────────
 
 class TestFlujo:
-    def test_flujo_con_entidades(self):
+    def test_flujo_oculta_entidades_sin_debug(self):
         bloque = Bloque("flujo", "raw", data={
             "nombre": "Cantidad de Contratos Activos", "score": 0.95,
             "entidades": [{"label": "Carrier", "valor": "Ambetter", "score": 1.0}],
@@ -101,9 +101,21 @@ class TestFlujo:
         })
         texto = _render(bloque)
         assert "*Flujo identificado:* Cantidad de Contratos Activos _(coincidencia: 0.95)_" in texto
+        # Detalle de entidades solo visible con FLOW_DEBUG=1 (paridad con el CLI)
+        assert "Carrier" not in texto.replace("Cantidad de Contratos Activos", "")
+
+    def test_flujo_muestra_entidades_en_debug(self, monkeypatch):
+        monkeypatch.setenv("FLOW_DEBUG", "1")
+        bloque = Bloque("flujo", "raw", data={
+            "nombre": "Cantidad de Contratos Activos", "score": 0.95,
+            "entidades": [{"label": "Carrier", "valor": "Ambetter", "score": 1.0}],
+            "multiple": None,
+        })
+        texto = _render(bloque)
         assert "• Carrier: Ambetter _(1.00)_" in texto
 
-    def test_flujo_sin_entidades(self):
+    def test_flujo_sin_entidades_en_debug(self, monkeypatch):
+        monkeypatch.setenv("FLOW_DEBUG", "1")
         bloque = Bloque("flujo", "raw", data={"nombre": "X", "score": 0.9, "entidades": [], "multiple": None})
         assert "_Sin ninguna entidad detectada._" in _render(bloque)
 

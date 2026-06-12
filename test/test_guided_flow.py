@@ -126,18 +126,21 @@ class TestPipelineConsulta:
 
         assert "  Analizando su consulta..." in resultado.lineas
         assert "  #--DEBUG Pregunta Formateada: consulta normalizada" in resultado.lineas
-        assert '  Se ha identificado el flujo: "Contratos Activos" - (Nivel de coincidencia: 0.91)' in resultado.lineas
-        assert "  Sin ninguna entidad detectada." in resultado.lineas
+        assert "  Tu pregunta se ha identificado mediante el flujo: Contratos Activos con un nivel de coincidencia del 0.91%." in resultado.lineas
         assert resultado.lineas[-1].startswith("  ¿Desea Confirmar?")
         assert resultado.botones == guided_flow._BOTONES_CONFIRMAR
 
-    def test_entidades_detectadas_se_muestran(self, sesion_management, monkeypatch):
+    def test_entidades_detectadas_van_solo_en_data(self, sesion_management, monkeypatch):
         entidades = {"o.Carrier": ("Humana", 0.93, "Carrier", "AND o.Carrier = 'Humana'")}
         _mock_pipeline_sql(monkeypatch, PREGUNTA_SQL, entidades=entidades)
         resultado = guided_flow.step(sesion_management, "contratos activos humana")
 
-        assert "  Con las siguientes entidades:" in resultado.lineas
-        assert f"      • {'Carrier':<20} → Humana  (confianza: 0.93)" in resultado.lineas
+        # El CLI ya no muestra entidades al usuario — viajan solo en data del bloque flujo
+        assert "  Con las siguientes entidades:" not in resultado.lineas
+        bloque_flujo = next(b for b in resultado.bloques if b.kind == "flujo")
+        assert bloque_flujo.data["entidades"] == [
+            {"label": "Carrier", "valor": "Humana", "score": 0.93}
+        ]
 
     def test_flujo_no_detectado_ofrece_reintento(self, sesion_management, monkeypatch):
         monkeypatch.setattr(cli, "reescribir_consulta", lambda hist, q: q)
