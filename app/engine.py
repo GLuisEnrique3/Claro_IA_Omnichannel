@@ -29,6 +29,7 @@ def sql_response(
     texto_usuario: str,
     query_log=None,
     debug_out: dict | None = None,
+    tipo_key: str = "3",
 ) -> tuple[str, str | None]:
     """Ejecuta el flujo SQL completo y retorna (respuesta_llm, sql_generado)."""
     error_previo: str | None = None
@@ -39,7 +40,7 @@ def sql_response(
 
         _t_sql = _time.perf_counter()
         try:
-            sql_final = _construir_sql_con_llm(pregunta, sql_filtro, entidades, texto_usuario, error_previo)
+            sql_final = _construir_sql_con_llm(pregunta, sql_filtro, entidades, texto_usuario, error_previo, tipo_key)
         except Exception as exc:
             error_previo = str(exc)
             if query_log:
@@ -134,10 +135,12 @@ def rag_response(
     user_query: str,
     query_log=None,
     debug_out: dict | None = None,
+    agency_name: str | None = None,
+    tipo_key: str = "3",
 ) -> str:
     _t = _time.perf_counter()
 
-    result = _ejecutar_rag_silenciosa(pregunta_config, user_query)
+    result = _ejecutar_rag_silenciosa(pregunta_config, user_query, agency_name, tipo_key)
 
     if query_log:
         query_log.rag_coleccion = pregunta_config.get("coleccion_chroma", "documentos_normativos")
@@ -195,6 +198,8 @@ def multiple_response(
     user_query: str,
     entidades_previas: dict | None = None,
     debug_out: dict | None = None,
+    tipo_key: str = "3",
+    agency_name: str | None = None,
 ) -> str:
     invoca_ids = pregunta.get("invoca", [])
     if not invoca_ids:
@@ -227,10 +232,10 @@ def multiple_response(
             tipo_sp = sp.get("tipo")
             if tipo_sp == "sql":
                 fut = executor.submit(
-                    _ejecutar_consulta_silenciosa, sp, sql_filtro, _entidades_para(sp), user_query
+                    _ejecutar_consulta_silenciosa, sp, sql_filtro, _entidades_para(sp), user_query, tipo_key
                 )
             elif tipo_sp == "rag":
-                fut = executor.submit(_ejecutar_rag_silenciosa, sp, user_query)
+                fut = executor.submit(_ejecutar_rag_silenciosa, sp, user_query, agency_name, tipo_key)
             else:
                 continue
             futures[fut] = sp
