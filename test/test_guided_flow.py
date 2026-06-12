@@ -142,6 +142,53 @@ class TestPipelineConsulta:
             {"label": "Carrier", "valor": "Humana", "score": 0.93}
         ]
 
+    def _mock_pipeline_multiple(self, monkeypatch, entidades: dict):
+        """Caso multiple con filtros_requeridos (réplica del caso B/7)."""
+        pregunta = {
+            "id": "7",
+            "texto": "Porque no me han pagado mis comisiones",
+            "tipo": "multiple",
+            "invoca": ["1"],
+            "filtros_requeridos": ["p.Policy_Number__c"],
+        }
+        monkeypatch.setitem(cli.USE_CASES["options"], "B", {
+            "nombre": "Comisiones",
+            "preguntas": [
+                {"id": "1", "texto": "Detalle Comisiones", "tipo": "sql",
+                 "parametros": ["p.Policy_Number__c"]},
+                pregunta,
+            ],
+        })
+        monkeypatch.setattr(cli, "reescribir_consulta", lambda hist, q: q)
+        monkeypatch.setattr(cli, "transformar_consulta_con_llm", lambda q: "consulta normalizada")
+        monkeypatch.setattr(
+            cli, "detectar_caso_de_uso",
+            lambda norm, cats: ({"nombre": pregunta["texto"], "pregunta": pregunta, "catalogo": "B"}, 0.95),
+        )
+        monkeypatch.setattr(cli, "extraer_entidades", lambda *a, **k: entidades)
+
+    def test_multiple_con_filtros_requeridos_y_entidades_confirma(self, sesion_management, monkeypatch):
+        # Regresión: la fusión de entidades por sub-caso debe alimentar el
+        # pre-chequeo de filtros_requeridos — si se pierde, B/7 nunca ejecuta.
+        entidades = {"p.Policy_Number__c": ("12345", 0.9, "Número de Póliza", "AND p.Policy_Number__c = '12345'")}
+        self._mock_pipeline_multiple(monkeypatch, entidades)
+
+        resultado = guided_flow.step(sesion_management, "porque no me han pagado la póliza 12345")
+
+        assert resultado.lineas[-1].startswith("  ¿Desea Confirmar?")
+        session = guided_flow.session_store.load(sesion_management)
+        assert session["state"] == "CONFIRM"
+        assert "p.Policy_Number__c" in session["pendiente"]["entidades"]
+
+    def test_multiple_con_filtros_requeridos_sin_entidades_pide_reformular(self, sesion_management, monkeypatch):
+        self._mock_pipeline_multiple(monkeypatch, entidades={})
+
+        resultado = guided_flow.step(sesion_management, "porque no me han pagado mis comisiones")
+
+        assert any("requiere identificar los siguientes filtros" in l for l in resultado.lineas)
+        session = guided_flow.session_store.load(sesion_management)
+        assert session["state"] == "REFORMULAR"
+
     def test_flujo_no_detectado_ofrece_reintento(self, sesion_management, monkeypatch):
         monkeypatch.setattr(cli, "reescribir_consulta", lambda hist, q: q)
         monkeypatch.setattr(cli, "transformar_consulta_con_llm", lambda q: "nada")

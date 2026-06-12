@@ -1733,16 +1733,16 @@ def ciclo_consultas(
             #    else:
             #        print(f"      (ninguna)")
             # Fusionar para ejecución (sin duplicados, el primero gana)
-            #entidades_previas = {}
-            #for ents in entidades_por_subcaso.values():
-            #    for param, val in ents.items():
-            #        if param not in entidades_previas:
-            #            entidades_previas[param] = val
-            #if entidades_previas:
-            #    q.entidades = [
-            #        {"param": p, "label": v[2], "valor": v[0], "score": v[1]}
-            #        for p, v in entidades_previas.items()
-            #    ]
+            entidades_previas = {}
+            for ents in entidades_por_subcaso.values():
+                for param, val in ents.items():
+                    if param not in entidades_previas:
+                        entidades_previas[param] = val
+            if entidades_previas:
+                q.entidades = [
+                    {"param": p, "label": v[2], "valor": v[0], "score": v[1]}
+                    for p, v in entidades_previas.items()
+                ]
         #elif entidades_previas:
         #    print("  Con las siguientes entidades:")
         #    for _, (val, sc_e, lbl, _) in entidades_previas.items():

@@ -39,7 +39,7 @@ HASHES_ESPERADOS = {
     "_input":               ("7a28cb180dfedc18", "core/guided_flow.py (_procesar: keywords globales, saludo, escalar)"),
     "_input_sn":            ("e871b74914d3ccdd", "core/guided_flow.py (validación S/N en CONFIRM/RETRY/OTRA)"),
     "identificar_usuario":  ("b79fa2109c59cdc2", "core/guided_flow.py (_handle_ident_tipo, _handle_ident_valor)"),
-    "ciclo_consultas":      ("dce935ab8b6a0437", "core/guided_flow.py (_pipeline_consulta, _handle_confirm, _ejecutar_pendiente)"),
+    "ciclo_consultas":      ("ae0b6bff54eede67", "core/guided_flow.py (_pipeline_consulta, _handle_confirm, _ejecutar_pendiente)"),
     "main":                 ("bb65e7d5aa2af899", "core/guided_flow.py (_completar_identificacion, iniciar_sesion)"),
     "ejecutar_rag":         ("8655045ce12df7a0", "core/guided_flow.py (_parse_rag_salida — formato de prints parseado)"),
     "ejecutar_multiple":    ("c92fd29af5b7dd07", "core/guided_flow.py (_parse_resultado_multiple — formato de prints parseado)"),

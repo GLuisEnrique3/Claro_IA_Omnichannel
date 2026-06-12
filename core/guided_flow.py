@@ -624,8 +624,17 @@ def _pipeline_consulta(session_key: str, session: dict, user_query: str) -> Flow
             for nombre_sp, ents in entidades_por_subcaso.items()
         ]
         flujo_data["multiple"] = {"invoca_nombres": invoca_nombres, "subcasos": subcasos_data}
-        # Fusión de entidades desactivada — réplica del bloque comentado en main.py:
-        # entidades_previas queda vacío y ejecutar_multiple re-extrae internamente.
+        # Fusionar para ejecución (sin duplicados, el primero gana) — réplica de main.py
+        entidades_previas = {}
+        for ents in entidades_por_subcaso.values():
+            for param, val in ents.items():
+                if param not in entidades_previas:
+                    entidades_previas[param] = val
+        if entidades_previas:
+            q.entidades = [
+                {"param": p, "label": v[2], "valor": v[0], "score": v[1]}
+                for p, v in entidades_previas.items()
+            ]
     elif entidades_previas:
         flujo_data["entidades"] = _entidades_data(entidades_previas)
 
