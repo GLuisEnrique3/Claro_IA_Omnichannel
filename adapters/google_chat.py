@@ -16,8 +16,10 @@ Seguridad: verificación del JWT que firma Google Chat
 Para pruebas locales con curl: GOOGLE_CHAT_SKIP_AUTH=1.
 """
 import asyncio
+import logging
 import os
 import threading
+import traceback
 
 from fastapi import APIRouter, HTTPException, Request
 
@@ -29,6 +31,8 @@ from core.conversation_store import conversation_store
 from adapters.chat_render import render_chat, texto_a_html_card
 
 router = APIRouter()
+
+_log = logging.getLogger("google_chat")
 
 # Límite de caracteres para mensajes de texto simple de Google Chat
 _MAX_TEXTO_SIMPLE = 4000
@@ -168,6 +172,36 @@ def _procesar_turno(session_key: str, texto: str) -> FlowResult:
         return resultado
 
 
+def _mensaje_error() -> dict:
+    """Mensaje genérico cuando el turno falla con una excepción capturable."""
+    return {
+        "text": (
+            "⚠️ Ocurrió un error procesando tu solicitud. "
+            "Por favor intenta de nuevo en unos momentos."
+        )
+    }
+
+
+async def _turno_seguro(session_key: str, texto: str) -> FlowResult | None:
+    """
+    Ejecuta _procesar_turno en un thread, capturando y logueando cualquier
+    excepción. Retorna None si hubo error (el caller responde con _mensaje_error).
+
+    NOTA: esto captura excepciones de Python (auth de Vertex, errores de
+    BigQuery, bugs). NO captura un OOM kill: ese es un SIGKILL del kernel que
+    termina el proceso sin pasar por este except — se resuelve con más memoria.
+    """
+    try:
+        return await asyncio.to_thread(_procesar_turno, session_key, texto)
+    except Exception:
+        _log.error(
+            "Error procesando turno (session=%s):\n%s",
+            session_key,
+            traceback.format_exc(),
+        )
+        return None
+
+
 # ── Webhook principal ──────────────────────────────────────────────────────────
 
 @router.post("/webhook", summary="Webhook de Google Chat")
@@ -188,7 +222,9 @@ async def webhook(request: Request):
 
     if event_type == "ADDED_TO_SPACE":
         # Arranque igual que el CLI: header + identificación
-        resultado = await asyncio.to_thread(_procesar_turno, session_key, "")
+        resultado = await _turno_seguro(session_key, "")
+        if resultado is None:
+            return _mensaje_error()
         return _render_mensaje(resultado)
 
     if event_type == "CARD_CLICKED":
@@ -199,8 +235,11 @@ async def webhook(request: Request):
         else:
             valor = next((p.get("value", "") for p in parametros if p.get("key") == "valor"), "")
         echo = "Selección: Omitir filtros (Enter)" if valor == OMITIR_SENTINEL else f"Selección: {valor}"
-        resultado = await asyncio.to_thread(_procesar_turno, session_key, valor)
-        respuesta = _render_mensaje(resultado, echo=echo)
+        resultado = await _turno_seguro(session_key, valor)
+        if resultado is None:
+            respuesta = _mensaje_error()
+        else:
+            respuesta = _render_mensaje(resultado, echo=echo)
         # NEW_MESSAGE: la respuesta se publica como mensaje nuevo y la
         # conversación queda visible como transcript (igual que el CLI).
         respuesta["actionResponse"] = {"type": "NEW_MESSAGE"}
@@ -215,5 +254,7 @@ async def webhook(request: Request):
     if not texto:
         return {}
 
-    resultado = await asyncio.to_thread(_procesar_turno, session_key, texto)
+    resultado = await _turno_seguro(session_key, texto)
+    if resultado is None:
+        return _mensaje_error()
     return _render_mensaje(resultado)
