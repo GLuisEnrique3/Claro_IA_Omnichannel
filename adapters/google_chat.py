@@ -28,11 +28,17 @@ import google.oauth2.id_token
 
 from core.guided_flow import FlowResult, OMITIR_SENTINEL, step
 from core.conversation_store import conversation_store
+from core.session_store import session_store
 from adapters.chat_render import render_chat, texto_a_html_card
+from adapters.chat_api import publicar_mensaje
 
 router = APIRouter()
 
 _log = logging.getLogger("google_chat")
+
+# Tareas en vuelo: se mantiene la referencia para que asyncio no las recolecte
+# (GC) antes de terminar — patrón estándar para create_task fire-and-forget.
+_TAREAS: set = set()
 
 # Límite de caracteres para mensajes de texto simple de Google Chat
 _MAX_TEXTO_SIMPLE = 4000
@@ -202,6 +208,60 @@ async def _turno_seguro(session_key: str, texto: str) -> FlowResult | None:
         return None
 
 
+# ── Procesamiento asíncrono (turnos que exceden los 30 s de Chat) ───────────────
+
+def _placeholder() -> dict:
+    """Respuesta síncrona inmediata mientras el trabajo pesado corre en background."""
+    return {"text": "⏳ Procesando tu consulta, dame unos segundos..."}
+
+
+def _es_turno_pesado(session_key: str, valor: str) -> bool:
+    """
+    True si el turno EJECUTARÁ la consulta pendiente (Gemini Pro + BigQuery / RAG),
+    lo que puede exceder la ventana síncrona de 30 s de Google Chat.
+
+    Eso ocurre solo en estado CONFIRM cuando el usuario confirma (S) u omite
+    filtros (Enter); reformular (N) y los clics de menú son instantáneos.
+    Espía el estado sin mutarlo. Sirve igual para CARD_CLICKED (valor del botón)
+    que para MESSAGE (el usuario escribe "S").
+    """
+    session = session_store.load(session_key)
+    if not session or session.get("state") != "CONFIRM":
+        return False
+    v = (valor or "").strip().upper()
+    if v == OMITIR_SENTINEL.upper() or v == "OMITIR":
+        v = ""
+    return v in ("S", "")
+
+
+def _agendar_async(space: str, thread_name: str, session_key: str,
+                   texto: str, echo: str | None = None) -> None:
+    """Lanza el procesamiento + publicación en background (fire-and-forget)."""
+    tarea = asyncio.create_task(
+        _procesar_y_publicar(space, thread_name, session_key, texto, echo)
+    )
+    _TAREAS.add(tarea)
+    tarea.add_done_callback(_TAREAS.discard)
+
+
+async def _procesar_y_publicar(space: str, thread_name: str, session_key: str,
+                               texto: str, echo: str | None) -> None:
+    """Procesa el turno pesado y publica el resultado via Chat REST API."""
+    resultado = await _turno_seguro(session_key, texto)
+    if resultado is None:
+        mensaje = _mensaje_error()
+    else:
+        mensaje = _render_mensaje(resultado, echo=echo)
+    try:
+        await asyncio.to_thread(publicar_mensaje, space, thread_name, mensaje)
+    except Exception:
+        _log.error(
+            "No se pudo publicar la respuesta async en %s:\n%s",
+            space,
+            traceback.format_exc(),
+        )
+
+
 # ── Webhook principal ──────────────────────────────────────────────────────────
 
 @router.post("/webhook", summary="Webhook de Google Chat")
@@ -219,6 +279,8 @@ async def webhook(request: Request):
     user_id = body.get("user", {}).get("name", "")
     space_name = body.get("space", {}).get("name", "")
     session_key = f"gchat::{space_name or 'unknown'}::{user_id or 'unknown'}"
+    # Thread del mensaje original, para que la respuesta async caiga en el mismo hilo
+    thread_name = (body.get("message", {}).get("thread", {}) or {}).get("name", "")
 
     if event_type == "ADDED_TO_SPACE":
         # Arranque igual que el CLI: header + identificación
@@ -235,6 +297,13 @@ async def webhook(request: Request):
         else:
             valor = next((p.get("value", "") for p in parametros if p.get("key") == "valor"), "")
         echo = "Selección: Omitir filtros (Enter)" if valor == OMITIR_SENTINEL else f"Selección: {valor}"
+        # Turno pesado (confirmar ejecución): procesar en background y publicar
+        # async via Chat REST API, para no chocar con el límite de 30 s del webhook.
+        if _es_turno_pesado(session_key, valor):
+            _agendar_async(space_name, thread_name, session_key, valor, echo=echo)
+            respuesta = _placeholder()
+            respuesta["actionResponse"] = {"type": "NEW_MESSAGE"}
+            return respuesta
         resultado = await _turno_seguro(session_key, valor)
         if resultado is None:
             respuesta = _mensaje_error()
@@ -253,6 +322,12 @@ async def webhook(request: Request):
     texto = (mensaje.get("argumentText") or mensaje.get("text") or "").strip()
     if not texto:
         return {}
+
+    # El usuario puede confirmar escribiendo "S" en vez de tocar el botón: mismo
+    # turno pesado → async.
+    if _es_turno_pesado(session_key, texto):
+        _agendar_async(space_name, thread_name, session_key, texto)
+        return _placeholder()
 
     resultado = await _turno_seguro(session_key, texto)
     if resultado is None:

@@ -32,3 +32,8 @@ clouddemo-service-account={
 GOOGLE_CHAT_AUDIENCE=
 # Solo para pruebas locales con curl (NUNCA en Cloud Run): omite la verificación JWT
 GOOGLE_CHAT_SKIP_AUTH=0
+# Ruta al JSON del service account de la app de Chat (scope chat.bot), usado para
+# publicar respuestas asincronas via spaces.messages.create cuando el turno excede
+# los 30 s del webhook. Si se omite, cae a VERTEX_CREDENTIALS_JSON (sirve solo si
+# ese mismo SA es el configurado como app de Chat).
+CHAT_CREDENTIALS_JSON=
