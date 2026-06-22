@@ -44,7 +44,8 @@
             "o.Carrier": "Compañía de seguros o aseguradora (ej. Humana, Ambetter, Aetna, Centene, Molina).",
             "o.State": "Estado de los Estados Unidos donde aplica el contrato (ej. Florida, Texas, Georgia).",
             "o.Line_Of_Business": "Línea de negocio o tipo de producto de seguros (ej. Medicare Advantage, ACA, Medicaid, DSNP)."
-          }
+          },
+          "usa_esto_cuando": "El usuario pide la cantidad o total de contratos activos como UN SOLO NÚMERO. Aplica también si menciona un carrier, estado o línea de negocio puntual como filtro (ej. 'cuántos contratos activos tengo con Oscar en Florida' sigue siendo UN número, solo que filtrado). NO aplica si pide ver el listado/desglose agrupado en varias filas por carrier, estado o línea de negocio, ni si pregunta por la fecha de aprobación — para eso usa 'Detalle de Contratos Activos'."
         },
         {
           "_comment_": "Detalle de Contratos Activos",
@@ -91,7 +92,8 @@
             "o.State": "Estado de los Estados Unidos donde aplica el contrato (ej. Florida, Texas, Georgia).",
             "o.Line_Of_Business": "Línea de negocio o tipo de producto de seguros (ej. Medicare Advantage, ACA, Medicaid, DSNP).",
             "vw.CreatedDate": "Fecha de aprobación del contrato"
-          }
+          },
+          "usa_esto_cuando": "El usuario pide ver el LISTADO o DESGLOSE de los contratos activos en varias filas agrupadas por carrier, estado o línea de negocio (no solo un número), o pregunta específicamente cuándo se activó/aprobó un contrato. Si solo pregunta 'cuántos' aunque mencione un carrier o estado puntual como filtro, NO es este caso — usa 'Cantidad de Contratos Activos'."
         },
         {
           "_comment_": "Cantidad de Contratos Pendientes",
@@ -139,7 +141,8 @@
             "s.StageName": "Etapa actual del contrato en el flujo de aprobación (ej. In Progress, Pending Release, Blackout).",
             "s.Sub_stage": "Sub-etapa detallada dentro del proceso de contratación del agente.",
             "ae.Name": "Nombre completo del ejecutivo de cuentas asignado al agente."
-          }
+          },
+          "usa_esto_cuando": "El usuario pide la cantidad o total de contratos pendientes de aprobación como UN SOLO NÚMERO. Aplica también si menciona un carrier, estado o etapa puntual como filtro (sigue siendo UN número, solo que filtrado). NO aplica si pide el listado/desglose agrupado en varias filas por carrier, estado o etapa, ni el motivo del retraso — para eso usa 'Detalle de Contratos Pendientes'."
         },
         {
           "_comment_": "Detalle de Contratos Pendientes",
@@ -191,7 +194,8 @@
             "s.Sub_stage": "Sub-etapa detallada dentro del proceso de contratación del agente.",
             "ae.Name": "Nombre completo del ejecutivo de cuentas asignado al agente.",
             "op.Internal_Notes__c": "Notas internas registradas en Salesforce que pueden indicar el motivo del retraso en la aprobación del contrato."
-          }
+          },
+          "usa_esto_cuando": "El usuario pide ver el LISTADO o DESGLOSE de los contratos pendientes en varias filas agrupadas por carrier, estado o etapa (no solo un número), incluyendo si hay algún problema técnico o documentación faltante en general. Si solo pregunta 'cuántos' aunque mencione un carrier, estado o etapa puntual como filtro, NO es este caso — usa 'Cantidad de Contratos Pendientes'. Tampoco aplica si pide el motivo puntual del retraso de UN contrato específico."
         },
         {
           "_comment_": "Cantidad de Contratos Inactivo",
@@ -216,7 +220,7 @@
             "2": "SELECT COUNT(*) as Total_Contratos FROM claroinsurance-dataplatform.claro_bi.vw_agent_contracts_inactive vw LEFT JOIN `claroinsurance-dataplatform.claro_bi.dim_cslb` o ON o.Id = vw.Carrier_State_line_of_Business__c  LEFT JOIN claroinsurance-dataplatform.claro_bi.dim_contact c ON c.Id = vw.Contracted_Agent__c  LEFT JOIN claroinsurance-dataplatform.claro_bi.dim_account_2 a ON a.Id = c.AccountId  WHERE o.Carrier NOT IN ('All Insurance','Insurance XL') {dynamic_filters}",
             "3": "SELECT COUNT(*) as Total_Contratos FROM claroinsurance-dataplatform.claro_bi.vw_agent_contracts_inactive vw LEFT JOIN `claroinsurance-dataplatform.claro_bi.dim_cslb` o ON o.Id = vw.Carrier_State_line_of_Business__c  LEFT JOIN claroinsurance-dataplatform.claro_bi.dim_contact c ON c.Id = vw.Contracted_Agent__c  LEFT JOIN claroinsurance-dataplatform.claro_bi.dim_account_2 a ON a.Id = c.AccountId  WHERE o.Carrier NOT IN ('All Insurance','Insurance XL') {dynamic_filters}"
           },
-          "entity_resolution": "Debes darme el Total_Contratos, no la cantidad de filas",
+          "entity_resolution": "Debes darme el Total_Contratos, más un resumen",
           "ending_resolution": "Si deseas ver el desglose de contratos inactivos por carrier o estado o evaluar nuevas oportunidades, te invito a reformular tu pregunta. Si la respuesta no es correcta, puedes escalar tu consulta a un humano. También puedes encontrar el detalle de tus contratos en el módulo CONTRACTS, dentro de la sección Agency Portfolio o a través del link https://arc.claroinsurance.com/contracts/portfolio-agency ",
           "parametros": [
             "c.NPN__c",
@@ -233,7 +237,8 @@
             "o.Carrier": "Compañía de seguros o aseguradora (ej. Humana, Ambetter, Aetna, Centene, Molina).",
             "o.State": "Estado de los Estados Unidos donde aplica el contrato (ej. Florida, Texas, Georgia).",
             "o.Line_Of_Business": "Línea de negocio o tipo de producto de seguros (ej. Medicare Advantage, ACA, Medicaid, DSNP)."
-          }
+          },
+          "usa_esto_cuando": "El usuario pide la cantidad o total de contratos inactivos como UN SOLO NÚMERO. Aplica también si menciona un carrier o estado puntual como filtro (sigue siendo UN número, solo que filtrado). NO aplica si pide el listado/desglose agrupado en varias filas por carrier o estado, ni si pregunta por una inactivación puntual — para eso usa 'Detalle de Contratos Inactivos'."
         },
         {
           "_comment_": "Detalle de Contratos Inactivos",
@@ -260,8 +265,8 @@
             "2": "SELECT o.Carrier,o.State,o.Line_Of_Business,COUNT(*) as Cantidad,SUM(COUNT(*)) OVER() as Total_General FROM claroinsurance-dataplatform.claro_bi.vw_agent_contracts_inactive vw LEFT JOIN `claroinsurance-dataplatform.claro_bi.dim_cslb` o ON o.Id = vw.Carrier_State_line_of_Business__c  LEFT JOIN claroinsurance-dataplatform.claro_bi.dim_contact c ON c.Id = vw.Contracted_Agent__c  LEFT JOIN claroinsurance-dataplatform.claro_bi.dim_account_2 a ON a.Id = c.AccountId  WHERE o.Carrier NOT IN ('All Insurance','Insurance XL') {dynamic_filters}  GROUP BY o.Carrier,o.State,o.Line_Of_Business",
             "3": "SELECT o.Carrier,o.State,o.Line_Of_Business,COUNT(*) as Cantidad,SUM(COUNT(*)) OVER() as Total_General FROM claroinsurance-dataplatform.claro_bi.vw_agent_contracts_inactive vw LEFT JOIN `claroinsurance-dataplatform.claro_bi.dim_cslb` o ON o.Id = vw.Carrier_State_line_of_Business__c  LEFT JOIN claroinsurance-dataplatform.claro_bi.dim_contact c ON c.Id = vw.Contracted_Agent__c  LEFT JOIN claroinsurance-dataplatform.claro_bi.dim_account_2 a ON a.Id = c.AccountId  WHERE o.Carrier NOT IN ('All Insurance','Insurance XL') {dynamic_filters}  GROUP BY o.Carrier,o.State,o.Line_Of_Business"
           },
-          "entity_resolution": "Debes dar el resultado de la query como respuesta, no agregues más columnas a la sql, solo hazlo si el usuario lo solicita explícitamente. Responde basado en Carrier, State y Line of Business. Todos los resultados son inactivos. La columna Total_General es el total real de contratos inactivos (mismo valor repetido en todas las filas); úsalo para el total general, NUNCA uses el número de filas. Para totales por carrier, estado o línea de negocio, suma los valores de la columna Cantidad correspondientes a ese grupo.",
-          "ending_resolution": "Si necesitas detalle sobreotro carrier o período específico, te invito a reformular tu pregunta. Si la respuesta no cubre tu necesidad, puedes escalar tu consulta a un humano. También puedes encontrar el detalle de tus contratos en el módulo CONTRACTS, dentro de la sección Agency Portfolio o a través del link https://arc.claroinsurance.com/contracts/portfolio-agency ", 
+          "entity_resolution": "Debes dar el resultado de la query como respuesta, no agregues más columnas a la sql, solo hazlo si el usuario lo solicita explícitamente.Todos los resultados son inactivos. La columna Total_General es el total real de contratos inactivos (mismo valor repetido en todas las filas); úsalo para el total general, NUNCA uses el número de filas. Para totales por carrier, estado o línea de negocio, suma los valores de la columna Cantidad correspondientes a ese grupo.",
+          "ending_resolution": "Si necesitas detalle sobreotro carrier o período específico, te invito a reformular tu pregunta. Si la respuesta no cubre tu necesidad, puedes escalar tu consulta a un humano. También puedes encontrar el detalle de tus contratos en el módulo CONTRACTS, dentro de la sección Agency Portfolio o a través del link https://arc.claroinsurance.com/contracts/portfolio-agency ",
           "parametros": [
             "c.NPN__c",
             "c.Name",
@@ -277,7 +282,8 @@
             "o.Carrier": "Compañía de seguros o aseguradora (ej. Humana, Ambetter, Aetna, Centene, Molina).",
             "o.State": "Estado de los Estados Unidos donde aplica el contrato (ej. Florida, Texas, Georgia).",
             "o.Line_Of_Business": "Línea de negocio o tipo de producto de seguros (ej. Medicare Advantage, ACA, Medicaid, DSNP)."
-          }
+          },
+          "usa_esto_cuando": "El usuario pide ver el LISTADO o DESGLOSE de los contratos inactivos en varias filas agrupadas por carrier o estado (no solo un número), o quiere saber si un contrato específico tuvo alguna inactivación. Si solo pregunta 'cuántos' aunque mencione un carrier o estado puntual como filtro, NO es este caso — usa 'Cantidad de Contratos Inactivos'."
         },
         {
           "_comment_": "Detalle General de Contratos",
@@ -310,7 +316,8 @@
             "el contrato fue aprobado o sigue pendiente"
           ],
           "entity_resolution": "FORMATO OBLIGATORIO: Responde únicamente en texto plano, organizado en párrafos separados por una línea en blanco. No utilices listas, viñetas, tablas, numeración ni encabezados. No transcribas notas internas literalmente. REGLA CRÍTICA SOBRE TOTALES: el total general de contratos activos y el total general de contratos pendientes son EXCLUSIVAMENTE los valores de la columna Total_General de cada conjunto de datos (un único número repetido en todas las filas de ese conjunto). Tienes PROHIBIDO calcular esos totales generales sumando las columnas Cantidad u Opp_Open, ni usar el número de filas; esas sumas pueden estar duplicadas y darían un número mayor al real. Genera un resumen ejecutivo extenso que cubra: cuántos contratos activos tiene el agente en total (Total_General de activos; para el desglose por carrier, estado o línea de negocio usa la columna Cantidad), cuántos contratos pendientes hay en total (Total_General de pendientes; para el desglose por carrier, estado o etapa usa la columna Opp_Open) y en qué etapas se encuentran, si alguna etapa requiere acción del agente (firma, envío de documentos, etc.), y cualquier contexto relevante sobre el avance o bloqueo de los contratos en proceso. El resumen debe ser completo, fluido y en lenguaje natural, como si lo redactara un ejecutivo de cuenta.",
-          "ending_resolution": "Si deseas profundizar en algún carrier, etapa o estado específico, te invito a reformular tu pregunta. Si la respuesta no es correcta o no cubre tu necesidad, puedes escalar tu consulta a un humano. También puedes encontrar el detalle de tus contratos en el módulo CONTRACTS, dentro de la sección Agency Portfolio o a través del link https://arc.claroinsurance.com/contracts/portfolio-agency"
+          "ending_resolution": "Si deseas profundizar en algún carrier, etapa o estado específico, te invito a reformular tu pregunta. Si la respuesta no es correcta o no cubre tu necesidad, puedes escalar tu consulta a un humano. También puedes encontrar el detalle de tus contratos en el módulo CONTRACTS, dentro de la sección Agency Portfolio o a través del link https://arc.claroinsurance.com/contracts/portfolio-agency",
+          "usa_esto_cuando": "El usuario pide un resumen o estado general de sus contratos sin especificar si son activos o pendientes (ej. 'estado de mis contratos', 'mis contratos fueron aprobados o están pendientes'), por lo que se necesita combinar el detalle de activos y pendientes."
         },
         {
           "_comment_": "Identificar motivo del retraso en la aprobación de un contrato",
@@ -367,7 +374,8 @@
             "s.Sub_stage": "Sub-etapa detallada dentro del proceso de contratación.",
             "ae.Name": "Nombre completo del ejecutivo de cuentas asignado al agente.",
             "op.Internal_Notes__c": "Notas internas registradas en Salesforce que pueden indicar el motivo del retraso en la aprobación del contrato."
-          }
+          },
+          "usa_esto_cuando": "El usuario pregunta explícitamente por la razón, causa o motivo del retraso/bloqueo en la aprobación de UN contrato puntual (no pide el listado general de pendientes)."
         },
         {
           "_comment_": "Instructivo Gestión de Contratos ACA",
@@ -422,7 +430,8 @@
             "CM-IN-16 Instructivo Gestión de contratos con Caresource ACA",
             "CM-IN-17 Instructivo Gestión de contratos con Ascension ACA",
             "CM-IN-18 Contract Management with ALLIANT ACA"
-          ]
+          ],
+          "usa_esto_cuando": "El usuario pregunta por el proceso, pasos o instructivo para gestionar/activar un contrato de línea ACA con un carrier específico o en general."
         },
         {
           "_comment_": "Instructivo Gestión de Contratos Medicare",
@@ -462,7 +471,8 @@
             "CM-IN-26 Instructivo Gestión de contratos con AVMED MEDICARE",
             "CM-IN-29 Instructivo de Gestión de Contratos con HUMANA MEDICARE",
             "Cuáles son los pasos que debo seguir para activar un contrato de MEDICARE"
-          ]
+          ],
+          "usa_esto_cuando": "El usuario pregunta por el proceso, pasos o instructivo para gestionar/activar un contrato de línea Medicare con un carrier específico o en general."
         },
         {
           "_comment_": "Instructivo Gestión de Contratos Life",
@@ -495,7 +505,8 @@
             "CM-IN-22 Instructivo Gestión de contratos con FORESTERS LIFE",
             "CM-IN-24 Instructivo Gestión de contratos con Ameritas LIFE",
             "CM-IN-25 Instructivo Gestión de contratos con ATHENE LIFE"
-          ]
+          ],
+          "usa_esto_cuando": "El usuario pregunta por el proceso, pasos o instructivo para gestionar/activar un contrato de línea Life (seguro de vida) con un carrier específico o en general."
         },
         {
           "_comment_": "Instructivo Gestión de Contratos Supplementario",
@@ -525,7 +536,8 @@
             "CM-IN-35 Instructivo Gestión de contratos con AMERITAS (SUPPLEMENTARY)",
             "CM-IN-37 Instructivo Gestión de contratos con United Health One SUPPLEMENTARY",
             "CM-IN-38 Instructivo Gestión de contratos con CIGNA (SUPPLEMENTARY)"
-          ]
+          ],
+          "usa_esto_cuando": "El usuario pregunta por el proceso, pasos o instructivo para gestionar/activar un contrato de línea Supplementary con un carrier específico o en general."
         },
         {
           "_comment_": "Licencias",
@@ -574,7 +586,8 @@
             "c.Name": "Nombre del Agente",
             "c.NPN__c": "Número de productor nacional del agente (NPN).",
             "a.Name_Agencies": "Nombre de la agencia a la que pertenece el agente o licencia"
-          }
+          },
+          "usa_esto_cuando": "El usuario pregunta por el estado, validación o detalle de sus licencias de agente (activas, inactivas, por estado o tipo)."
         },
         {
           "_comment_": "Oferta de Productos de Claro",
@@ -610,7 +623,8 @@
             "o.Carrier": "Compañía de seguros o aseguradora (ej. Humana, Ambetter, Aetna).",
             "o.State": "Estado de los Estados Unidos donde aplica el contrato (ej. Florida, Texas, Georgia).",
             "o.Line_Of_Business": "Línea de negocio o tipo de producto de seguros (ej. Medicare Advantage, ACA, Medicaid, DSNP)."
-          }
+          },
+          "usa_esto_cuando": "El usuario pregunta qué productos, carriers, estados o líneas de negocio ofrece Claro Insurance (catálogo general de oferta), sin referirse a sus propios contratos."
         },
         {
           "_comment_": "Carrier Oportunidades de Contratación",
@@ -653,7 +667,8 @@
             "o.Carrier": "Compañía de seguros o aseguradora (ej. Humana, Ambetter, Aetna, Centene, Molina).",
             "o.State": "Estado de los Estados Unidos donde aplica el contrato (ej. Florida, Texas, Georgia).",
             "o.Line_Of_Business": "Línea de negocio o tipo de producto de seguros (ej. Medicare Advantage, ACA, Medicaid, DSNP)."
-          }
+          },
+          "usa_esto_cuando": "El usuario pregunta qué oportunidades de contratación tiene disponibles (combinaciones de carrier/estado/línea de negocio que aún no tiene contratadas), no por contratos ya existentes."
         }
       ]
     },
@@ -713,7 +728,8 @@
             "p.Net_Payment__c": "Es el monto pagado al agente",
             "p.Payment_Type__c": "Tipo de Pago: ('Fee Payment','Other','Adjustment','Bonus','Commissions in advance','Technology Maintenance Fee','Administrative Fee','Commission','Transfer Fee','Override','Capital Payment')",
             "p.Payment_Status__c": "Status del Pago: ('Paid','Pending','Not paid','Paid by carrier','On-Hold','Internal Offset')"
-          }
+          },
+          "usa_esto_cuando": "El usuario pregunta cuánto le han pagado o pagaron de comisiones en un período (total/monto agregado), sin pedir el desglose registro por registro ni por póliza específica."
         },
         {
           "_comment_": "Comisiones Bloqueadas",
@@ -769,7 +785,8 @@
             "p.Net_Payment__c": "Es el monto bloqueado o pendiente que corresponde al agente",
             "p.Payment_Type__c": "Tipo de Pago: ('Fee Payment','Other','Adjustment','Bonus','Commissions in advance','Technology Maintenance Fee','Administrative Fee','Commission','Transfer Fee','Override','Capital Payment')",
             "p.Payment_Status__c": "Status del Pago: ('Paid','Pending','Not paid','Paid by carrier','On-Hold','Internal Offset')"
-          }
+          },
+          "usa_esto_cuando": "El usuario pregunta cuánto tiene en comisiones bloqueadas, retenidas o pendientes de liberación (no pagadas todavía), como total agregado."
         },
         {
           "_comment_": "Detalle Comisiones",
@@ -831,7 +848,8 @@
             "c.Comissions_Payment__c": "Si el pago va directo al Agente o la Agencia",
             "Contact_Payee_c_Status_Validation": "Si el Contact Payee es valido de recibir pago",
             "Status_Contact_Payee__c": "Status del Contact Pay, se usa para validacion de pagos."
-          }
+          },
+          "usa_esto_cuando": "El usuario pide el detalle línea por línea de pagos de comisiones (por póliza, miembro o pago individual), requiere un número de póliza y un período/fecha de pago."
         },
         {
           "_comment_": "Frecuencia de Liquidación por Carrier",
@@ -858,7 +876,8 @@
           "ejemplos": [
             "Calendario Pago de Liquidaciones 2026"
           ],
-          "entity_resolution": ""
+          "entity_resolution": "",
+          "usa_esto_cuando": "El usuario pregunta cada cuánto o con qué frecuencia un carrier liquida/paga las comisiones a la agencia (ciclo de liquidación), no a cuánto le pagaron a él."
         },
         {
           "_comment_": "Frecuencia Pago de Comisiones",
@@ -916,7 +935,8 @@
           "ejemplos": [
             "Calendario Pago Comisiones"
           ],
-          "entity_resolution": ""
+          "entity_resolution": "",
+          "usa_esto_cuando": "El usuario pregunta en qué fecha exacta se paga o se transfiere el dinero de comisiones a los agentes (calendario de pago a agentes), no la frecuencia de liquidación del carrier."
         },
         {
           "_comment_": "Estado del Contrato y Agente por Poliza",
@@ -947,7 +967,8 @@
             "Contract_Status": "Status del contrato del agente (Internal o AOR) para el Carrier y State de esa poliza",
             "Type_Match": "Indica si el contrato encontrado es Internal, AOR, o No encontrado",
             "Agent_Status__c": "Status del agente. Si contiene Suspended indica suspension activa que bloquea pagos"
-          }
+          },
+          "usa_esto_cuando": "El usuario pregunta por el estado del contrato y del agente asociados a UNA póliza específica (válido para pago), usando el número de póliza como filtro."
         },
         {
           "_comment_": "Porque no me han pagado mis comisiones",
@@ -983,7 +1004,8 @@
             "Quiero investigar el motivo de comisiones pendientes sin liberar"
           ],
           "ending_resolution": "Si deseas ampliar el diagnóstico con otra póliza o período,  te invito a reformular tu pregunta. Si el diagnóstico no resuelve tu inquietud, puedes escalar tu consulta a un humano para una revisión personalizada.",
-          "entity_resolution": "TIENES DOS FUENTES DE DATOS: (A) Detalle de Comisiones — registros de pago con Payment_Status__c, Net_Payment (La comision) Commission_Month y Pay_on_Date. (B) Estado del Contrato y Agente — Policy_Status, Contract_Status, Type_Match y Agent_Status__c.  LÓGICA DE DIAGNÓSTICO — sigue este orden y reporta únicamente la causa más relevante encontrada: CASO 1 — existen registros en fuente A con Payment_Status__c distinto de Paid, ejemplo  On-Hold los cuales indican comisión retenida administrativamente; menciona monto, carrier y período. La posibles razones pueden ser no hay asignación clara del pago, es decir p.Contact_Payee__c sea nulo. O no es valido. Te puedes basar en la columna Contact_Payee_ID_Validation.  Pending indica comisión en proceso de liberación aún no depositada.  Paid by carrier indica que el carrier realizó el pago directamente sin intervención de la agencia; el agente debe confirmar con el carrier.  Not paid indica pago no procesado; menciona monto y período afectado. Las causas pueden ser Contact Payee inactivo, o el internal agent no coincide con el Contact Payee. Te puedes basar en la validacion entre Contact_Payee_c_Status_Validation. Si no te funciona ninguna validacion, invita al usuario a revisarlo con asistencia personalizada. No menciones causas de Not Paid, si no hay registros distintos a Paid. Si hay registros Paid, puedes mencionarlos. Si el usuario pregunta a que entidad(agente/agencia) se le pagan las comisiones, te basas en la columna Comissions_Payment__c. Si hay pagos en Payment Status On Hold, Pending o Not Paid y no identificas la razón claramente, invita al usuario a buscar asesoría personalizada. CASO 2 — fuente A está vacía o todos sus registros están en Paid: diagnostica la causa estructural usando fuente B. Si el Agent_Status es Inactive ,Contracting Failed o Suspended by carrier, no califican para la liquidación ni el pago de los registros Si Type_Match es No encontrado: no existe contrato activo para ese Carrier y State. Si Contract_Status no es activo o completado: el contrato está inactivo o vencido para ese Carrier y State. Si Policy_Status indica inactividad: la póliza no está activa en el sistema. Reporta solo la primera causa encontrada en ese orden. CASO 3 — el usuario pregunta explícitamente por desfase de fechas, calendario o cuándo se espera el próximo pago: usa Commission_Month y Pay_on_Date para analizar el desfase y apóyate en el calendario embebido. Ejemplo, el usuario recibe un pago (Pay on Date) este mes pero el Commision Month es de hace dos meses. El commision month se basa en la frequencia de liquidación detallada a continuación: ACA — mes en curso: BCBS TX, Cigna, Oscar, UnitedHealthcare; 1 mes vencido: Ambetter, Molina, Wellpoint, Ascension, AvMed; 2 meses vencidos: Alliant, AmeriHealth Caritas, Anthem BCBS, Christus, Healthfirst; variable 1-2 meses: Aetna, CareSource. LIFE — mes en curso la mayoría: American National, Ameritas, Fidelity, Mutual of Omaha, National Life. MEDICARE — mes en curso: Aetna, Simply-Anthem, UnitedHealthcare; 1 mes vencido: Centene, Cigna, Devoted, Doctors, Florida Blue, Humana, HealthSun, Wellpoint; 2 meses vencidos: Wellcare. SUPPLEMENTARY — mes en curso: Ameritas, Cigna, National General, One Share Health, SureBridge, United Health One; 1 mes vencido: Florida Blue. Commission_Month es el mes en que el carrier transfiere el pago a la agencia. Pay_on_Date es la fecha en que la agencia libera el pago al agente. REGLA FINAL: un solo diagnóstico claro y directo. No listes causas posibles. No muestres tablas ni registros individuales salvo que el usuario lo solicite. Responde en español sin cierres formales."
+          "entity_resolution": "TIENES DOS FUENTES DE DATOS: (A) Detalle de Comisiones — registros de pago con Payment_Status__c, Net_Payment (La comision) Commission_Month y Pay_on_Date. (B) Estado del Contrato y Agente — Policy_Status, Contract_Status, Type_Match y Agent_Status__c.  LÓGICA DE DIAGNÓSTICO — sigue este orden y reporta únicamente la causa más relevante encontrada: CASO 1 — existen registros en fuente A con Payment_Status__c distinto de Paid, ejemplo  On-Hold los cuales indican comisión retenida administrativamente; menciona monto, carrier y período. La posibles razones pueden ser no hay asignación clara del pago, es decir p.Contact_Payee__c sea nulo. O no es valido. Te puedes basar en la columna Contact_Payee_ID_Validation.  Pending indica comisión en proceso de liberación aún no depositada.  Paid by carrier indica que el carrier realizó el pago directamente sin intervención de la agencia; el agente debe confirmar con el carrier.  Not paid indica pago no procesado; menciona monto y período afectado. Las causas pueden ser Contact Payee inactivo, o el internal agent no coincide con el Contact Payee. Te puedes basar en la validacion entre Contact_Payee_c_Status_Validation. Si no te funciona ninguna validacion, invita al usuario a revisarlo con asistencia personalizada. No menciones causas de Not Paid, si no hay registros distintos a Paid. Si hay registros Paid, puedes mencionarlos. Si el usuario pregunta a que entidad(agente/agencia) se le pagan las comisiones, te basas en la columna Comissions_Payment__c. Si hay pagos en Payment Status On Hold, Pending o Not Paid y no identificas la razón claramente, invita al usuario a buscar asesoría personalizada. CASO 2 — fuente A está vacía o todos sus registros están en Paid: diagnostica la causa estructural usando fuente B. Si el Agent_Status es Inactive ,Contracting Failed o Suspended by carrier, no califican para la liquidación ni el pago de los registros Si Type_Match es No encontrado: no existe contrato activo para ese Carrier y State. Si Contract_Status no es activo o completado: el contrato está inactivo o vencido para ese Carrier y State. Si Policy_Status indica inactividad: la póliza no está activa en el sistema. Reporta solo la primera causa encontrada en ese orden. CASO 3 — el usuario pregunta explícitamente por desfase de fechas, calendario o cuándo se espera el próximo pago: usa Commission_Month y Pay_on_Date para analizar el desfase y apóyate en el calendario embebido. Ejemplo, el usuario recibe un pago (Pay on Date) este mes pero el Commision Month es de hace dos meses. El commision month se basa en la frequencia de liquidación detallada a continuación: ACA — mes en curso: BCBS TX, Cigna, Oscar, UnitedHealthcare; 1 mes vencido: Ambetter, Molina, Wellpoint, Ascension, AvMed; 2 meses vencidos: Alliant, AmeriHealth Caritas, Anthem BCBS, Christus, Healthfirst; variable 1-2 meses: Aetna, CareSource. LIFE — mes en curso la mayoría: American National, Ameritas, Fidelity, Mutual of Omaha, National Life. MEDICARE — mes en curso: Aetna, Simply-Anthem, UnitedHealthcare; 1 mes vencido: Centene, Cigna, Devoted, Doctors, Florida Blue, Humana, HealthSun, Wellpoint; 2 meses vencidos: Wellcare. SUPPLEMENTARY — mes en curso: Ameritas, Cigna, National General, One Share Health, SureBridge, United Health One; 1 mes vencido: Florida Blue. Commission_Month es el mes en que el carrier transfiere el pago a la agencia. Pay_on_Date es la fecha en que la agencia libera el pago al agente. REGLA FINAL: un solo diagnóstico claro y directo. No listes causas posibles. No muestres tablas ni registros individuales salvo que el usuario lo solicite. Responde en español sin cierres formales.",
+          "usa_esto_cuando": "El usuario pregunta explícitamente por qué no le han pagado, no le ha llegado o está bloqueada la comisión de una póliza específica (diagnóstico de causa), requiere número de póliza y fecha de pago."
         },
         {
           "_comment_": "Pre-Liquidación de Comisiones",
@@ -1031,7 +1053,8 @@
             "p.Commission_Month__c": "Fecha de pago de la comisión del Carrier a la Agencia en formato mensual para luego ser liberada al Agente, a través de Pay on Date. Acepta expresiones como 'el mes pasado', 'mayo 2024', 'hace 3 meses', 'este mes'.Siempre debes trabajarlo como DATE_TRUNC(p.Commission_Month__c,MONTH)",
             "p.Net_Payment__c": "Es el monto pagado al agente",
             "p.Payment_Type__c": "Tipo de Pago: ('Fee Payment','Other','Adjustment','Bonus','Commissions in advance','Technology Maintenance Fee','Administrative Fee','Commission','Transfer Fee','Override','Capital Payment')"
-          }
+          },
+          "usa_esto_cuando": "El usuario pregunta cuánto le van a pagar o cuál es el monto preliquidado (aún no pagado definitivamente) para el próximo ciclo, como total agregado."
         },
         {
           "_comment_": "Detalle Pre-Liquidación de Comisiones",
@@ -1087,7 +1110,8 @@
             "p.Payment_Type__c": "Tipo de Pago: ('Fee Payment','Other','Adjustment','Bonus','Commissions in advance','Technology Maintenance Fee','Administrative Fee','Commission','Transfer Fee','Override','Capital Payment')",
             "b.Contact__c": "ID del agente Interno",
             "p.Contact_Payee__c": "ID del Contact Payee asociado al pago de comisión preliquidada"
-          }
+          },
+          "usa_esto_cuando": "El usuario pide el detalle línea por línea de las comisiones en estado de pre-liquidación (por póliza o pago individual), requiere número de póliza y fecha de pago."
         },
         {
           "_comment_": "Detalle de Reconciliaciones",
@@ -1139,7 +1163,8 @@
             "c.NPN__c": "Número de productor nacional del agente (NPN).",
             "c.Name": "Nombre del Agente",
             "b.Policy_Number__c": "Número de Póliza"
-          }
+          },
+          "usa_esto_cuando": "El usuario pide ver el detalle, estado o historial de reconciliaciones (reclamos de comisión) de UNA póliza específica, requiere el número de póliza."
         },
         {
           "_comment_": "Guía de Reconciliaciones",
@@ -1223,7 +1248,8 @@
           "coleccion_chroma": "reconciliaciones_faq",
           "embedding_model": "all-MiniLM-L6-v2",
           "entity_resolution": "Responde basándote exclusivamente en la Guía de Reconciliaciones de Comisiones de Claro Insurance. Aplica estas reglas según lo que pregunte el usuario: (1) ELEGIBILIDAD: si pregunta si puede o cuándo someter una reconciliación, guíalo por los 6 criterios: falta un pago, póliza bien procesada y asignada al NPN correcto, póliza vigente y al día en primas, póliza sin riesgo ni Binder payment ni Late Payment, póliza visible y elegible en el portal del carrier, tiempo mínimo de espera cumplido según el carrier. Si algún criterio falla, el reclamo será rechazado. (2) PROCESO Y CANALES: la ruta en ARC es Payments → Reconciliation report → botón New Reconciliation. Existen 3 canales: Carga individual (una póliza visible en su libro), Carga masiva Auto Fill (varias pólizas visibles en el libro), Carga masiva Without Fill (pólizas no visibles en el libro pero con número de póliza o marketplace ID). (3) ESTADOS: Waiting on carrier response = escalada, depende del carrier; Belongs to another agent = comisión es de otro AOR, no procede; Incomplete information = información errónea o incompleta, debe corregir y volver a someter; Duplicate request = misma póliza, mes y concepto ya existe; Validated - Scheduled for payment = procede y se paga en el próximo ciclo; Already paid = ya fue pagada; Policy not yet effective = la fecha de efectividad de la póliza es posterior al mes reclamado; Denied/Rejected by carrier = el carrier la negó; Commission on hold = póliza reportada como Late Payment; Accepted - Carrier Internal Process = carrier aceptó y se compromete a pagar. (4) PLAZOS: plazo general 6 meses, mayoría de carriers hasta 1 año, Ambetter solo 90 días. Tiempos mínimos de espera: Ambetter 30 días, Florida Blue 90 días, UHC 60 días, Aetna 60 días, Cigna 60 días, Molina 60 días, Oscar 60 días, BCBS 60 días. (5) REQUISITOS POR CARRIER: si el usuario pregunta por un carrier específico, detalla sus campos mínimos exactos según la guía. Oscar requiere mínimo 10 miembros activos. UHC y BCBS solo aceptan el número de póliza del carrier; Ambetter no acepta números de HealthSherpa. (6) CATEGORÍAS: No payment (missing policies), Incomplete payment (missing members), Bonus, Override, Wrong payment (rate). (7) AJUSTES: corte el día 17 de cada mes; ajustes antes del 17 se pagan en el ciclo inmediato, después del 17 en el siguiente mes. En el statement aparecen como 'Ajuste por reconciliación [Id]'. (8) DESCUENTOS CRUZADOS: si tiene saldo negativo en una filial, Claro puede descontar hasta un 40% de una liquidación positiva en otra filial. (9) Si no procede reconciliación y el caso involucra cambio de agente asignado, indicar que debe hacerse por solicitud de Book of Business, no por reconciliación.",
-          "ending_resolution": "Si deseas revisar los requisitos de un carrier específico o el significado de algún estado, te invito a reformular tu pregunta. Si tu situación no se resuelve con la guía, puedes escalar tu consulta a un humano."
+          "ending_resolution": "Si deseas revisar los requisitos de un carrier específico o el significado de algún estado, te invito a reformular tu pregunta. Si tu situación no se resuelve con la guía, puedes escalar tu consulta a un humano.",
+          "usa_esto_cuando": "El usuario pregunta cómo funciona el proceso de reconciliación de comisiones: elegibilidad, requisitos por carrier, plazos, estados, canales o cómo someter un reclamo (es una guía/FAQ, no una consulta de datos de una póliza puntual)."
         },
         {
           "_comment_": "Detalle de Comisiones Avanzadas",
@@ -1293,7 +1319,8 @@
             "o.Carrier": "Compañía de seguros o aseguradora (ej. Humana, Ambetter, Aetna).",
             "o.State": "Estado de los Estados Unidos donde aplica la póliza.",
             "o.Line_Of_Business": "Línea de negocio o tipo de producto de seguros."
-          }
+          },
+          "usa_esto_cuando": "El usuario pregunta por el estado o detalle de sus préstamos de Comisiones en Avance (Commissions in Advance / advances): saldo, capital pagado, intereses o próximas fechas de cobro. Requiere el NPN del agente."
         },
         {
           "_comment_": "Bonus Compensation ACA",
@@ -1301,19 +1328,20 @@
           "texto": "Bonus Compensation ACA",
           "tipo": "rag",
           "semantic_examples": [
-          "Bonus Compensation ACA",
-          "Compensación por bono ACA",
-          "Qué bonos tengo disponibles en ACA",
-          "Cuáles son los bonos que puedo reclamar en ACA",
-          "bonos disponibles y requisitos en ACA",
-          "instructivo bonos ACA",
-          "instructivo bonos",
-          "compensacion por Bonus de ACA"
+            "Bonus Compensation ACA",
+            "Compensación por bono ACA",
+            "Qué bonos tengo disponibles en ACA",
+            "Cuáles son los bonos que puedo reclamar en ACA",
+            "bonos disponibles y requisitos en ACA",
+            "instructivo bonos ACA",
+            "instructivo bonos",
+            "compensacion por Bonus de ACA"
           ],
           "coleccion_chroma": "bonus_compensation_aca",
           "embedding_model": "all-MiniLM-L6-v2",
-          "entity_resolution":" Responde basándote exclusivamente en la información de Bonus Compensation de Claro Insurance. Detalla los bonos disponibles para agentes, sus requisitos específicos, y el proceso para reclamarlos. Si es posible el url del flyer. Si el usuario pregunta por un bono específico, proporciona la información detallada sobre ese bono. Si la información no cubre su pregunta o si tiene dudas adicionales, puedes escalar su consulta a un humano.",
-          "ending_resolution": "Si deseas revisar los requisitos de un carrier específico o el significado de algún estado, te invito a reformular tu pregunta. Si tu situación no se resuelve con la guía, puedes escalar tu consulta a un humano."
+          "entity_resolution": " Responde basándote exclusivamente en la información de Bonus Compensation de Claro Insurance. Detalla los bonos disponibles para agentes, sus requisitos específicos, y el proceso para reclamarlos. Si es posible el url del flyer. Si el usuario pregunta por un bono específico, proporciona la información detallada sobre ese bono. Si la información no cubre su pregunta o si tiene dudas adicionales, puedes escalar su consulta a un humano.",
+          "ending_resolution": "Si deseas revisar los requisitos de un carrier específico o el significado de algún estado, te invito a reformular tu pregunta. Si tu situación no se resuelve con la guía, puedes escalar tu consulta a un humano.",
+          "usa_esto_cuando": "El usuario pregunta por los bonos disponibles para agentes en la línea ACA, sus requisitos o cómo reclamarlos."
         },
         {
           "_comment_": "Override Compensation ACA",
@@ -1340,10 +1368,25 @@
             "category": "override_compensation_aca"
           },
           "agency_filter": true,
-          "agency_values": ["Prestige Insurance Consultant","Carepoint Insurance LLC","Core Shield Health Agency LLC","Major League Insurance","AMCL Group LLC","Solutions Advisor Insurance INC","SKY Insurance LS Corp","Elite Insurance Agents Corp","ARPHA PARTNERS LLC","Fenix Protection Group","Comfort Insurance","Alliant Insurance Group","Select Insurance"],
+          "agency_values": [
+            "Prestige Insurance Consultant",
+            "Carepoint Insurance LLC",
+            "Core Shield Health Agency LLC",
+            "Major League Insurance",
+            "AMCL Group LLC",
+            "Solutions Advisor Insurance INC",
+            "SKY Insurance LS Corp",
+            "Elite Insurance Agents Corp",
+            "ARPHA PARTNERS LLC",
+            "Fenix Protection Group",
+            "Comfort Insurance",
+            "Alliant Insurance Group",
+            "Select Insurance"
+          ],
           "embedding_model": "all-MiniLM-L6-v2",
           "entity_resolution": "FORMATO OBLIGATORIO: Resumen ejecutivo tipo parrafo. Esta tabla muestra la compensación de Override ACA para Agencias para Pólizas Nuevas y Renovadas, organizada por aseguradora y banda de número de miembros (300–500, 501–1,000, 1,001–2,000, 2,001–4,000, 4,001+). Los montos son en dólares por miembro. Cuando el usuario pregunte por un carrier específico, identifica la fila correspondiente y otorgale una descripcion. Uso los comentarios en la parte inferior de la tabla",
-          "ending_resolution": "Si deseas consultar el override de otro carrier o banda de miembros, te invito a reformular tu pregunta. Si la información no cubre tu necesidad, puedes escalar tu consulta a un humano."
+          "ending_resolution": "Si deseas consultar el override de otro carrier o banda de miembros, te invito a reformular tu pregunta. Si la información no cubre tu necesidad, puedes escalar tu consulta a un humano.",
+          "usa_esto_cuando": "El usuario pregunta por la compensación de Override en ACA (pago adicional por volumen/membresía) para un carrier o banda de miembros específica."
         },
         {
           "_comment_": "Commision Compensation ACA ",
@@ -1351,20 +1394,20 @@
           "texto": "Commision Compensation ACA",
           "tipo": "rag",
           "semantic_examples": [
-          "Commision Compensation por agente ACA",
-          "Comisiones compensadas por agente y carrier ACA",
-          "Compensación por comisión por agente ACA",
-          "valor de la compensacion por comision para agentes ACA",
-          "¿Cuál es el porcentaje de override que recibo por las pólizas del carrier para agentes? ACA"
-
+            "Commision Compensation por agente ACA",
+            "Comisiones compensadas por agente y carrier ACA",
+            "Compensación por comisión por agente ACA",
+            "valor de la compensacion por comision para agentes ACA",
+            "¿Cuál es el porcentaje de override que recibo por las pólizas del carrier para agentes? ACA"
           ],
           "coleccion_chroma": "commission_compensation",
           "metadata_filter": {
             "category": "commission_compensation_aca"
           },
           "embedding_model": "all-MiniLM-L6-v2",
-          "entity_resolution":" Responde basándote exclusivamente en la información de Commission Compensation de Claro Insurance. Tienes como recurso Carrier,Detalle/Plan,Estado Geografico,Compensación por Comisión del Tipo New or Renewal, Mercado ON&OFF Exchange. Debes generar una respuesta detallando el Carrier, el estado, la compensación por New, Renewal y Detalle/Plan o Mercado si aporta valor. Puedes basarte en las Notas también, si agregan valor. Si la información no cubre su pregunta o si tiene dudas adicionales, puedes escalar su consulta a un humano.",
-          "ending_resolution": "Si deseas ampliar el análisis del preliquidado por póliza específica,  te invito a reformular tu pregunta. Si la respuesta no cubre tu necesidad, puedes escalar tu consulta a un humano."
+          "entity_resolution": " Responde basándote exclusivamente en la información de Commission Compensation de Claro Insurance. Tienes como recurso Carrier,Detalle/Plan,Estado Geografico,Compensación por Comisión del Tipo New or Renewal, Mercado ON&OFF Exchange. Debes generar una respuesta detallando el Carrier, el estado, la compensación por New, Renewal y Detalle/Plan o Mercado si aporta valor. Puedes basarte en las Notas también, si agregan valor. Si la información no cubre su pregunta o si tiene dudas adicionales, puedes escalar su consulta a un humano.",
+          "ending_resolution": "Si deseas ampliar el análisis del preliquidado por póliza específica,  te invito a reformular tu pregunta. Si la respuesta no cubre tu necesidad, puedes escalar tu consulta a un humano.",
+          "usa_esto_cuando": "El usuario pregunta por la compensación de Comisión en ACA (porcentaje o monto por venta nueva o renovación) para un carrier, estado o plan específico."
         }
       ]
     },
@@ -1396,7 +1439,8 @@
           "metadata_filter": {
             "category": "flujos"
           },
-          "embedding_model": "all-MiniLM-L6-v2"
+          "embedding_model": "all-MiniLM-L6-v2",
+          "usa_esto_cuando": "El usuario pregunta cuáles son los plazos o tiempos estándar para enviar/completar la documentación de un contrato con un carrier."
         },
         {
           "_comment_": "Horarios y Roles del Equipo",
@@ -1422,7 +1466,8 @@
           "metadata_filter": {
             "category": "horarios"
           },
-          "embedding_model": "all-MiniLM-L6-v2"
+          "embedding_model": "all-MiniLM-L6-v2",
+          "usa_esto_cuando": "El usuario pregunta por los horarios de atención o los roles/responsabilidades de los miembros del equipo de Claro Insurance."
         },
         {
           "_comment_": "ARC OFF EXCHANGES FAQ",
@@ -1496,7 +1541,8 @@
           "metadata_filter": {
             "category": "faq"
           },
-          "embedding_model": "all-MiniLM-L6-v2"
+          "embedding_model": "all-MiniLM-L6-v2",
+          "usa_esto_cuando": "El usuario pregunta sobre pólizas Off-Exchange: cómo funcionan, diferencias con Marketplace/On-Exchange, SEP, comisiones, formularios fiscales (1095-A/B) o requisitos de carriers para Off-Exchange."
         },
         {
           "_comment_": "CLARO INSURANCE FAQ",
@@ -1611,7 +1657,8 @@
           "metadata_filter": {
             "category": "claro insurance faq"
           },
-          "embedding_model": "all-MiniLM-L6-v2"
+          "embedding_model": "all-MiniLM-L6-v2",
+          "usa_esto_cuando": "El usuario pregunta información general sobre qué es Claro Insurance, cómo funciona como FMO, sus servicios, fees, onboarding, comisiones en general o soporte — preguntas institucionales/FAQ que no calzan en ningún otro caso de uso específico."
         }
       ]
     }

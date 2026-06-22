@@ -1,5 +1,6 @@
 import sys
 import json
+import pickle
 import textwrap
 import datetime
 import os
@@ -46,6 +47,17 @@ USE_CASES_PATH = Path(__file__).parent / "data" / "use_cases.json"
 with open(USE_CASES_PATH, encoding="utf-8") as _f:
     USE_CASES = json.load(_f)
 
+# ── Carga de embeddings de casos de uso ───────────────────────────────────────
+_USE_CASES_EMB_PATH = Path(__file__).parent / "data" / "use_cases_embeddings.pkl"
+_USE_CASES_EMBEDDINGS: dict = {}
+try:
+    with open(_USE_CASES_EMB_PATH, "rb") as _f:
+        _USE_CASES_EMBEDDINGS = pickle.load(_f)
+except Exception:
+    _USE_CASES_EMBEDDINGS = {}
+
+_UMBRAL_INTENT = 0.85
+
 # ── Configuración de tipos de usuario ─────────────────────────────────────────
 #  umbral: similitud coseno mínima (0-1) para aceptar la identificación.
 TIPOS_USUARIO = {
@@ -73,6 +85,12 @@ TIPOS_USUARIO = {
         "umbral": None,
         "prompt_id": None,
     },
+}
+
+# Nombres de catálogos leídos directamente del JSON — se actualizan solos.
+CATALOG_LABELS = {
+    key: data["nombre"]
+    for key, data in USE_CASES.get("options", {}).items()
 }
 
 # Permisos de catálogos por tipo de usuario (configurable en data/catalog_permissions.json).
@@ -136,7 +154,6 @@ _PALABRAS_VOLVER        = {"volver", "back"}
 _PALABRAS_MENU          = {"nueva sesión","nueva sesion"}
 _PALABRAS_INSTRUCCIONES = {"instrucciones", "help", "ayuda", "guia", "guía"}
 _PALABRAS_ESCALAR       = {"escalar", "escalar a un humano"}
-_PALABRAS_NO            = {"no", "n", "no gracias", "nada", "nada mas", "nada más", "no, gracias", "eso es todo", "ninguna"}
 _PALABRAS_SALUDO        = {"hola", "hola!", "hey", "buenas", "buenas tardes", "buenos días", "buenos dias", "buenas noches"}
 
 
@@ -167,6 +184,17 @@ def _input(prompt: str) -> str:
     return valor
 
 
+def _input_sn(prompt: str, con_enter: bool = False) -> str:
+    """Repite el prompt hasta recibir S, N, o (si con_enter=True) Enter vacío."""
+    validas = {"S", "N"}
+    while True:
+        respuesta = _input(prompt).strip().upper()
+        if respuesta in validas or (con_enter and respuesta == ""):
+            return respuesta
+        opciones = "S / N / Enter" if con_enter else "S / N"
+        print(f"  ⚠  Opción no válida. Por favor ingrese: {opciones}.\n")
+
+
 # ── Helpers de UI ──────────────────────────────────────────────────────────────
 def _sep():
     print("━" * 55)
@@ -181,61 +209,6 @@ def _header():
     print('  Escribe "instrucciones" en cualquier momento para ver el flujo.')
     print('  Escribe "salir" o "exit" para salir del sistema.')
     print()
-
-
-_TEMAS_POR_CATALOGO = {
-    "A": """CONTRATOS
-    · Cantidad y detalle de Contratos Activos, Pendientes e Inactivos
-    · Detalle General de Contratos (Activos + Pendientes combinados)
-    · Verificar status del contrato en el sistema  (*)
-    · Identificar motivo del retraso en la aprobación  (*)
-    · Instructivo Gestión de Contratos ACA
-    · Instructivo Gestión de Contratos Medicare
-    · Instructivo Gestión de Contratos Life
-    · Instructivo Gestión de Contratos Supplementary
-    · Licencias
-    · Oferta de Productos disponibles por carrier y estado
-    · Validación para generación de contrato  (*)""",
-    "B": """PAGOS Y COMISIONES
-    · Comisiones Pagadas
-    · Comisiones Bloqueadas
-    · Detalle Comisiones  (*)
-    · Pre-Liquidación de Comisiones
-    · Detalle de Pre-Liquidación  (*)
-    · Frecuencia de Liquidación por Carrier
-    · Calendario de Pago de Comisiones a Agentes
-    · Estado del Contrato y Agente por Póliza  (*)
-    · Porque no me han pagado mis comisiones  (*)
-    · Detalle de Reconciliaciones por Póliza  (*)
-    · Guía de Reconciliaciones de Comisiones""",
-    "C": """DOCUMENTOS NORMATIVOS
-    · Plazos Estándar de Envío de Contratos
-    · Horarios y Roles del Equipo
-    · ARC Off-Exchanges FAQ
-    · Claro Insurance FAQ""",
-}
-
-
-def _construir_recurso_presentacion(catalogos_permitidos: list) -> str:
-    """
-    Texto de presentación (quién es el asistente y qué temas puede consultar el
-    usuario según sus catálogos permitidos). Se le pasa al LLM del Agente 1 como
-    recurso para responder preguntas conversacionales/meta sobre el propio asistente,
-    en vez de que el modelo invente una respuesta genérica.
-    """
-    temas = "\n\n".join(
-        _TEMAS_POR_CATALOGO[c] for c in catalogos_permitidos if c in _TEMAS_POR_CATALOGO
-    )
-    return (
-        "Eres el asistente de Claro Insurance. Ayudas a representantes de agencia, "
-        "agentes NPN y management a consultar contratos, comisiones/pagos y documentos "
-        "normativos en lenguaje natural: detectas el tema solicitado, extraes filtros "
-        "mencionados en la consulta, pides confirmación antes de ejecutar, y devuelves "
-        "el resultado con una explicación.\n\n"
-        "Temas que el usuario puede consultar:\n\n"
-        f"{temas}\n\n"
-        "(*) Estas consultas requieren al menos un filtro obligatorio para ejecutarse."
-    )
 
 
 def _mostrar_instrucciones():
@@ -309,6 +282,86 @@ def _mostrar_instrucciones():
       obligatorio para ejecutarse (ver tabla de filtros).
 
   ══════════════════════════════════════════════════════
+  FILTROS QUE RECONOCE EL SISTEMA
+  ══════════════════════════════════════════════════════
+
+  Puede combinar varios filtros en una misma consulta.
+  El sistema los detecta aunque los escriba en lenguaje
+  natural, sin necesidad de seguir un formato exacto.
+
+  ┌──────────────────────┬─────────────────────────────────────┐
+  │ FILTRO               │ EJEMPLOS DE USO                     │
+  ├──────────────────────┼─────────────────────────────────────┤
+  │ Carrier              │ "con Ambetter"                      │
+  │                      │ "de Humana"  /  "solo Aetna"        │
+  ├──────────────────────┼─────────────────────────────────────┤
+  │ Estado               │ "en Florida"  /  "de Texas"         │
+  │                      │ "para Georgia"                      │
+  ├──────────────────────┼─────────────────────────────────────┤
+  │ Línea de Negocio     │ "de Medicare Advantage"             │
+  │                      │ "línea ACA"  /  "productos DSNP"    │
+  ├──────────────────────┼─────────────────────────────────────┤
+  │ Etapa                │ "en estado Blackout"                │
+  │                      │ "etapa In Progress"                 │
+  ├──────────────────────┼─────────────────────────────────────┤
+  │ Sub-etapa            │ "sub-etapa Missing Certification"   │
+  ├──────────────────────┼─────────────────────────────────────┤
+  │ Agencia              │ "de la agencia Comfort Insurance"   │
+  │                      │ "agentes de Miami Insurance"        │
+  ├──────────────────────┼─────────────────────────────────────┤
+  │ NPN                  │ "del NPN 1234567"                   │
+  │                      │ "agente NPN 9876543"                │
+  ├──────────────────────┼─────────────────────────────────────┤
+  │ Ejecutivo de Cuenta  │ "ejecutivo Carlos Pérez"            │
+  │                      │ "del AE María López"                │
+  ├──────────────────────┼─────────────────────────────────────┤
+  │ Fecha de Pago        │ "el mes pasado"                     │
+  │                      │ "en mayo 2024"  /  "hace 2 meses"   │
+  │                      │ "este mes"  /  "mayo del 2023"      │
+  ├──────────────────────┼─────────────────────────────────────┤
+  │ Mes de Comisión      │ "commission month mayo"             │
+  │                      │ "mes de comisiones abril 2024"      │
+  ├──────────────────────┼─────────────────────────────────────┤
+  │ Número de Póliza (*) │ "póliza H12345678"                  │
+  │                      │ "póliza número A9876543"            │
+  ├──────────────────────┼─────────────────────────────────────┤
+  │ Estado de Pago       │ "status Paid"  /  "pagos Not paid"  │
+  │                      │ "comisiones On-Hold"                │
+  ├──────────────────────┼─────────────────────────────────────┤
+  │ Tipo de Pago         │ "tipo Commission"  /  "Override"    │
+  │                      │ "solo Bonus"  /  "tipo Adjustment"  │
+  ├──────────────────────┼─────────────────────────────────────┤
+  │ ID de Oportunidad(*) │ "id 006Az000001XyZW"               │
+  └──────────────────────┴─────────────────────────────────────┘
+
+  (*) Filtro obligatorio para ciertas consultas de detalle.
+
+  ══════════════════════════════════════════════════════
+  EJEMPLOS DE CONSULTAS COMPLETAS
+  ══════════════════════════════════════════════════════
+
+  "Contratos pendientes de Ambetter en Florida"
+  "Cuántos contratos activos tengo con Humana"
+  "Detalle de contratos inactivos en Texas"
+  "Status del contrato con Humana en Florida"
+  "Por qué está retrasado el contrato del agente NPN 9876543"
+  "Qué productos ofrece Claro en Georgia"
+  "Puedo generar un contrato con Aetna en Florida"
+  "Comisiones pagadas con Humana el mes pasado"
+  "Cuánto tengo en comisiones bloqueadas en mayo 2024"
+  "Detalle de comisiones póliza H12345678"
+  "Cuánto me van a pagar en la próxima preliquidación"
+  "Estado del contrato del agente para la póliza 67YM83"
+  "Por qué no me han pagado las comisiones de la póliza A9876543"
+  "Reconciliaciones de la póliza 34XG37"
+  "Cómo someter una reconciliación con Cigna"
+  "Frecuencia de liquidación de Molina ACA"
+  "Cuándo se pagan las comisiones de este mes"
+  "Instructivo para contratar con Cigna Supplementary"
+  "Cuáles son los plazos para enviar contratos"
+  "Qué dice el FAQ de Off-Exchange sobre comisiones"
+
+  ══════════════════════════════════════════════════════
   COMANDOS GLOBALES (disponibles en todo momento)
   ══════════════════════════════════════════════════════
 
@@ -318,6 +371,128 @@ def _mostrar_instrucciones():
   nueva sesión                 — reinicia la identificación
 """)
     _sep()
+
+
+# ── Ruteo por intención natural ───────────────────────────────────────────────
+_PROMPT_NORMALIZAR_INTENT = """Eres un asistente de seguros (Claro Insurance).
+Tu única tarea es simplificar la consulta eliminando todas las entidades específicas y
+conservando únicamente la intención y las palabras de acción clave.
+
+ELIMINA siempre:
+- Nombres de carriers / aseguradoras (Humana, Ambetter, Oscar, Molina, Aetna, Simply, Cigna, United, Friday, HealthSun, etc.)
+- Nombres de estados (Florida, Texas, Georgia, etc.)
+- Nombres de agentes, agencias o ejecutivos
+- Números NPN, IDs de oportunidad, números de póliza
+- Fechas, meses, años, períodos (el mes pasado, mayo 2024, este mes, etc.)
+- Montos o porcentajes
+- Lineas de Negocios
+- Conectores de entidad (con, de, en, para, con la agencia, del NPN, etc.)
+
+CONSERVA siempre:
+- La palabra de acción: cuántos, detalle, estado, instructivo, pasos, cuándo, frecuencia,
+  calendario, por qué, reconciliación, pre-liquidación, licencias, oportunidades, etc.
+- El objeto: contratos, comisiones, pagos, licencias, plazos, productos, etc.
+- El calificador si importa: activos, pendientes, inactivos, bloqueadas, pagadas, etc.
+
+
+REGLAS:
+- Responde SOLO con la frase simplificada. Sin puntuación extra ni explicaciones.
+- Máximo 8 palabras.
+- Escribe en español.
+
+EJEMPLOS:
+
+  Usuario: "Cuántos contratos activos tengo con Humana en Florida"
+  Respuesta: cuántos contratos activos
+
+  Usuario: "Detalle de mis contratos activos con Humana en Florida"
+  Respuesta: detalle de contratos activos
+
+  Usuario: "Cuántos contratos pendientes tiene mi agencia con Ambetter en Texas"
+  Respuesta: cuántos contratos pendientes
+
+  Usuario: "Detalle de contratos inactivos con Molina en Georgia"
+  Respuesta: detalle de contratos inactivos
+
+  Usuario: "Dame el resumen de mis contratos activos y pendientes"
+  Respuesta: resumen de contratos activos y pendientes
+
+  Usuario: "Cuánto me pagaron de comisiones el mes pasado con Humana en Medicare"
+  Respuesta: comisiones pagadas
+
+  Usuario: "Comisiones bloqueadas con Aetna en Florida"
+  Respuesta: comisiones bloqueadas
+
+  Usuario: "Detalle de comisiones de la póliza H12345678"
+  Respuesta: detalle de comisiones
+
+  Usuario: "Cuánto me van a pagar en la próxima preliquidación con Oscar"
+  Respuesta: pre-liquidación de comisiones
+
+  Usuario: "Por qué no me han pagado mis comisiones con Aetna este mes"
+  Respuesta: por qué no me han pagado mis comisiones
+
+  Usuario: "Cuándo se pagan las comisiones de Oscar Health en Florida"
+  Respuesta: cuándo se pagan las comisiones
+
+  Usuario: "Cuál es la frecuencia de liquidación por carrier"
+  Respuesta: frecuencia de liquidación por carrier
+
+  Usuario: "Necesito ver el instructivo de contratos ACA con Aetna en Georgia"
+  Respuesta: instructivo contratos ACA
+
+  Usuario: "Cuáles son los pasos para activar un contrato con Oscar"
+  Respuesta: pasos para activar un contrato ACA
+
+  Usuario: "Cómo activo un contrato con Humana Medicare"
+  Respuesta: instructivo contratos Medicare
+
+  Usuario: "Dame el resumen para contratar con Cigna Supplementary"
+  Respuesta: instructivo contratos Supplementary
+
+  Usuario: "Cual es el status de mi contrato con Gold Kidney Health Plan en Medicare?"
+  Respuesta: estado de mis contratos
+
+  Usuario: "Mi contrato de Doctors en Medicare ya fue aprobado o está pendiente de revisión?"
+  Respuesta: contrato aprobado o pendiente de revision
+
+  Usuario: "El contrato de Medicare en Wellcare para el NPN 18966008 tuvo alguna inactivacion?"
+  Respuesta: detalle contratos inactivos
+
+  Usuario: "Hay algun problema tecnico en la gestion del contrato para el NPN 20763612 en Medicare del carrier Healthsun en Florida?"
+  Respuesta: hay problema tecnico en el contrato
+
+  Usuario: "Cuándo se activó mi contrato con Medicare en Simply para el NPN 12345 en Florida"
+  Respuesta: cuándo se activó el contrato
+
+  Usuario: "En qué fecha fue aprobado mi contrato con Humana ACA"
+  Respuesta: cuándo fue aprobado el contrato
+
+  Usuario: "Ver el estado de mi licencia en Florida tipo Health"
+  Respuesta: estado de licencias
+
+  Usuario: "Qué productos ofrece Claro en Georgia"
+  Respuesta: oferta de productos
+
+  Usuario: "Cuáles son los plazos para enviar contratos"
+  Respuesta: plazos estándar de envío de contratos
+
+  Usuario: "Qué oportunidades de contratación tengo disponibles con Oscar en Florida"
+  Respuesta: oportunidades de contratación
+
+Consulta del usuario: "{user_query}" """.strip()
+
+
+
+def transformar_consulta_con_llm(user_query: str) -> str:
+    """Normaliza la consulta del usuario a una descripción de intención estándar."""
+    try:
+        prompt = _PROMPT_NORMALIZAR_INTENT.format(user_query=user_query)
+        response = _llm_call(llm_model, prompt)
+        normalized = response.text.strip().split("\n")[0].strip()
+        return normalized if normalized else user_query
+    except Exception:
+        return user_query
 
 
 _PROMPT_REESCRIBIR = """Eres un asistente de un sistema de seguros (Claro Insurance).
@@ -357,175 +532,51 @@ def reescribir_consulta(historial: list[dict], query: str) -> str:
         return query
 
 
-def _extraer_json(texto: str) -> dict:
-    """Limpia bloques markdown que el LLM pueda agregar y parsea el JSON resultante."""
-    limpio = re.sub(r"^```(?:json)?\s*", "", texto.strip(), flags=re.MULTILINE)
-    limpio = re.sub(r"```\s*$", "", limpio, flags=re.MULTILINE)
-    return json.loads(limpio.strip())
-
-
-_PROMPT_SELECCIONAR_CASO_USO = """Eres el clasificador de intención del sistema de consultas de Claro Insurance.
-
-RECURSO DE PRESENTACIÓN (quién eres y qué temas puede consultar el usuario):
-{recurso_presentacion}
-
-Tienes la siguiente lista de casos de uso disponibles. Cada uno tiene un nombre y una
-descripción de "usa esto cuando" que indica exactamente en qué situación aplica:
-
-{lista_casos}
-
-Consulta del usuario: "{query}"
-
-Tu tarea:
-1. Primero decide si la consulta es una pregunta CONVERSACIONAL/META sobre el propio
-   asistente (ej. "quién eres", "qué eres", "qué puedes hacer", "cómo funcionas", "para
-   qué sirves", "ayúdame", "no sé cómo preguntar", "dame instrucciones", "qué temas puedo
-   consultar" sin más contexto) en vez de una solicitud real de negocio. Si es así, usa el
-   RECURSO DE PRESENTACIÓN de arriba para construir tu respuesta — resúmelo o cita los
-   temas más relevantes a lo que preguntó, en vez de inventar una respuesta genérica fuera
-   de ese recurso. Reglas para redactar "mensaje_confirmacion" en este caso:
-   - NO empieces siempre con "Soy el/tu asistente de Claro Insurance" ni ninguna frase fija
-     de apertura.
-   - Si la consulta pregunta específicamente por tu identidad ("quién eres", "qué eres"),
-     ahí sí podés presentarte brevemente, una sola vez.
-   - Si la consulta ya pide algo concreto (ej. "qué temas puedo consultar", "dame
-     instrucciones", "cómo pregunto"), ve DIRECTO al contenido pedido (lista de temas o
-     ejemplos del recurso) sin reintroducirte ni repetir quién eres.
-   - Si el usuario indica que ya está confundido o insiste en no saber cómo formular su
-     pregunta, sé más concreto citando 2 o 3 temas puntuales del recurso en vez de repetir
-     una explicación general.
-   - Si el usuario no proporciona suficiente información, pide más detalles de forma natural.
-   - Si el usuario solicita Escalar a un Humano, redacta un mensaje que indique que dicha funcionalidad no se encuentra disponible todavía.
-   - "es_meta_conversacional": true
-   - "encontrado": false, "catalogo": null, "id": null
-   - "mensaje_confirmacion": la respuesta basada en el recurso, NATURAL y DIRECTA (NO una
-     pregunta de confirmación).
-2. Si NO es una pregunta meta, elige el caso de uso (catalogo + id) cuya descripción
-   "usa esto cuando" corresponda mejor a la intención de la consulta. Si ninguno
-   corresponde con claridad, indica que no se encontró.
-3. Si no es meta y encontraste un caso de uso, redacta un mensaje breve en español,
-   natural y conversacional, que diga qué entendiste que el usuario quiere consultar
-   (mencionando explícitamente cualquier carrier, estado, fecha, póliza, agencia, NPN u
-   otro dato concreto que el usuario haya escrito en su consulta). Esa explicación SIEMPRE
-   debe terminar EXACTAMENTE con esta línea, sin variarla ni reemplazarla por otra
-   pregunta (ej. NO uses "¿es correcto?", "¿necesitas algún filtro específico?" ni
-   variantes propias):
-   "Por favor, confírmame si esto es correcto."
-   Si no es meta y no encontraste un caso de uso claro, el mensaje debe decir que no
-   pudiste identificar la solicitud y pedir más detalle (en este caso NO uses la línea de
-   confirmación anterior, ya que no hay nada que confirmar).
-
-Responde ÚNICAMENTE con un JSON válido, sin markdown ni explicaciones, con este formato exacto:
-{{"es_meta_conversacional": true_o_false, "encontrado": true_o_false, "catalogo": "A_o_B_o_C_o_null", "id": "id_o_null", "mensaje_confirmacion": "mensaje"}}""".strip()
-
-_MENSAJE_SIN_CASO_DEFAULT = (
-    "No logro identificar con claridad qué necesitas. "
-    "¿Podrías darme un poco más de detalle sobre lo que quieres consultar?"
-)
-
-
-def seleccionar_caso_de_uso_llm(
-    query: str,
+def detectar_caso_de_uso(
+    normalized_query: str,
     catalogos_permitidos: list,
-) -> tuple[dict | None, str, bool]:
+) -> tuple:
     """
-    Agente 1: clasifica la consulta del usuario contra los casos de uso permitidos
-    usando su descripción "usa_esto_cuando", y redacta el mensaje de confirmación.
-    El LLM redacta el mensaje leyendo directamente la consulta (no se le pasan
-    entidades pre-extraídas, ya que esas dependen del caso de uso que aún no se conoce).
-    Retorna (use_case_entry, mensaje_confirmacion, es_meta_conversacional).
-    use_case_entry es None si no se identificó un caso de uso claro, si el LLM devolvió
-    un id inexistente, o si la consulta es conversacional/meta sobre el propio asistente
-    (en ese caso es_meta_conversacional es True y mensaje_confirmacion ya es la respuesta
-    final, no una pregunta de confirmación).
+    Matching semántico del query normalizado contra use_cases_embeddings.pkl.
+    Solo considera casos de uso cuyo catálogo esté en catalogos_permitidos.
+    Retorna (entry_dict, score) o (None, mejor_score) si no supera el umbral.
     """
-    candidatos_lineas = []
-    for catalogo_key in catalogos_permitidos:
-        catalogo = USE_CASES["options"].get(catalogo_key, {})
-        for pregunta in catalogo.get("preguntas", []):
-            usa_esto_cuando = pregunta.get("usa_esto_cuando", "")
-            candidatos_lineas.append(
-                f'- catalogo="{catalogo_key}" id="{pregunta["id"]}" nombre="{pregunta["texto"]}"\n'
-                f'  usa_esto_cuando: {usa_esto_cuando}'
-            )
-    lista_casos = "\n".join(candidatos_lineas) if candidatos_lineas else "(sin casos de uso disponibles)"
-    recurso_presentacion = _construir_recurso_presentacion(catalogos_permitidos)
+    if not _USE_CASES_EMBEDDINGS:
+        return None, 0.0
 
-    prompt = _PROMPT_SELECCIONAR_CASO_USO.format(
-        recurso_presentacion=recurso_presentacion, lista_casos=lista_casos, query=query
-    )
+    from sentence_transformers import util
 
-    try:
-        response = _llm_call(llm_model, prompt)
-        resultado = _extraer_json(response.text)
-    except Exception:
-        return None, _MENSAJE_SIN_CASO_DEFAULT, False
+    candidatos = {
+        uc_id: entry
+        for uc_id, entry in _USE_CASES_EMBEDDINGS.items()
+        if entry["catalogo"] in catalogos_permitidos
+    }
+    if not candidatos:
+        return None, 0.0
 
-    es_meta = bool(resultado.get("es_meta_conversacional", False))
-    if es_meta:
-        mensaje = resultado.get("mensaje_confirmacion") or (
-            "¡Hola! Soy el asistente de Claro Insurance. Puedo ayudarte con consultas sobre "
-            "contratos, comisiones/pagos y documentos normativos. ¿Qué te gustaría consultar?"
-        )
-        return None, mensaje, True
+    model = _get_embed_model()
+    q_emb = model.encode(normalized_query, convert_to_tensor=True)
 
-    if not resultado.get("encontrado"):
-        return None, resultado.get("mensaje_confirmacion") or _MENSAJE_SIN_CASO_DEFAULT, False
+    best_id, best_score = None, 0.0
+    for uc_id, entry in candidatos.items():
+        if "embeddings_list" in entry:
+            c_emb = torch.tensor(entry["embeddings_list"], device=q_emb.device)
+            score = float(util.cos_sim(q_emb, c_emb)[0].max())
+        else:
+            uc_emb = torch.tensor(entry["embedding"], device=q_emb.device)
+            score = float(util.cos_sim(q_emb, uc_emb)[0][0])
+        if score > best_score:
+            best_score, best_id = score, uc_id
 
-    catalogo_key = resultado.get("catalogo")
-    uc_id = resultado.get("id")
-    catalogo = USE_CASES["options"].get(catalogo_key, {})
-    preguntas_map = {p["id"]: p for p in catalogo.get("preguntas", [])}
-    pregunta = preguntas_map.get(uc_id)
-
-    if pregunta is None:
-        # El LLM "alucinó" un catalogo/id inexistente — se trata como no encontrado.
-        return None, _MENSAJE_SIN_CASO_DEFAULT, False
-
-    use_case_entry = {"nombre": pregunta["texto"], "pregunta": pregunta, "catalogo": catalogo_key}
-    mensaje = resultado.get("mensaje_confirmacion") or f'Entiendo que quieres consultar: {pregunta["texto"]}. ¿Es correcto?'
-    return use_case_entry, mensaje, False
-
-
-_PROMPT_INTERPRETAR_CONFIRMACION = """Eres un asistente que interpreta si un usuario confirmó o no una propuesta.
-
-Se le mostró al usuario este mensaje de confirmación:
-"{mensaje_confirmacion}"
-
-El usuario respondió:
-"{respuesta_usuario}"
-
-Determina si el usuario confirmó que quiere proceder tal cual, o no. Si NO confirmó pero
-su respuesta trae suficiente información para ajustar la consulta (una corrección, una
-aclaración, un cambio de filtro), genera la consulta ajustada combinando la intención
-original con su corrección. Si simplemente rechazó sin aclarar nada, deja query_ajustada en null.
-
-Responde ÚNICAMENTE con un JSON válido, sin markdown ni explicaciones, con este formato exacto:
-{{"confirmado": true_o_false, "query_ajustada": "texto_o_null"}}""".strip()
-
-
-def _interpretar_confirmacion(mensaje_confirmacion: str, respuesta_usuario: str) -> dict:
-    """
-    Agente 2: decide si la respuesta libre del usuario confirma la propuesta del
-    Agente 1 o no. Ante cualquier duda/error se resuelve como no confirmado
-    (fail-closed), para evitar ejecutar una consulta que el usuario no aprobó.
-    """
-    prompt = _PROMPT_INTERPRETAR_CONFIRMACION.format(
-        mensaje_confirmacion=mensaje_confirmacion, respuesta_usuario=respuesta_usuario
-    )
-    try:
-        response = _llm_call(llm_model, prompt)
-        resultado = _extraer_json(response.text)
-        return {
-            "confirmado": bool(resultado.get("confirmado", False)),
-            "query_ajustada": resultado.get("query_ajustada") or None,
-        }
-    except Exception:
-        return {"confirmado": False, "query_ajustada": None}
+    best_score = round(best_score, 4)
+    if best_id and best_score >= _UMBRAL_INTENT:
+        return candidatos[best_id], best_score
+    return None, best_score
 
 
 # ── Coincidencia semántica ─────────────────────────────────────────────────────
 _embed_model = None
+
 
 def _get_embed_model():
     global _embed_model
@@ -533,6 +584,7 @@ def _get_embed_model():
         from sentence_transformers import SentenceTransformer
         _embed_model = SentenceTransformer("all-MiniLM-L6-v2")
     return _embed_model
+
 
 def _buscar_semantico(
     query: str,
@@ -547,7 +599,7 @@ def _buscar_semantico(
     model = _get_embed_model()
     q_emb = model.encode(query, convert_to_tensor=True)
     if embs_precalc is not None:
-        c_emb = torch.tensor(embs_precalc)
+        c_emb = torch.tensor(embs_precalc, device=q_emb.device)
     else:
         c_emb = model.encode([str(c) for c in candidatos], convert_to_tensor=True)
     scores = util.cos_sim(q_emb, c_emb)[0]
@@ -556,6 +608,7 @@ def _buscar_semantico(
     if best_score >= umbral:
         return str(candidatos[best_idx]), best_score
     return None, best_score
+
 
 def _detectar_carrier_rag(
     query: str,
@@ -587,6 +640,7 @@ def _detectar_carrier_rag(
     if best_score >= umbral:
         return carriers[best_idx], best_score
     return None, best_score
+
 
 # ── Parser de fechas en lenguaje natural ──────────────────────────────────────
 def _parse_fecha_natural(texto: str) -> datetime.date | None:
@@ -641,6 +695,7 @@ def _parse_fecha_natural(texto: str) -> datetime.date | None:
             return datetime.date(year, num, 1)
 
     return None
+
 
 # ── Detección de entidades dinámicas ──────────────────────────────────────────
 def extraer_entidades(
@@ -743,7 +798,7 @@ def extraer_entidades(
 
         embs_pre = FILTROS_EMBEDDINGS.get(filtro_key, {}).get("embeddings")
         if embs_pre:
-            c_emb = torch.tensor(embs_pre)
+            c_emb = torch.tensor(embs_pre, device=ngram_embs.device)
         else:
             c_emb = model.encode([str(c) for c in candidatos], convert_to_tensor=True)
 
@@ -759,6 +814,80 @@ def extraer_entidades(
             detectados[param] = (valor, best_score, label, sql_snippet)
 
     return detectados
+
+
+def solicitar_filtros_dinamicos(
+    pregunta: dict,
+    filtro_fijo_key: str | None,
+    entidades_previas: dict | None = None,
+    texto_previo: str = "",
+) -> tuple[str, dict]:
+    parametros = pregunta.get("parametros", [])
+    aplicables = [
+        p for p in parametros
+        if p in PARAM_TO_FILTRO and PARAM_TO_FILTRO[p][0] != filtro_fijo_key
+    ]
+    if not aplicables:
+        return "", {}
+
+    labels_disp = [PARAM_TO_FILTRO[p][1] for p in aplicables]
+
+    # Si el query original ya tenía entidades, mostrarlas para confirmar sin re-preguntar
+    if entidades_previas:
+        print()
+        print(f"Para refinar tu consulta podrías confirmarme: {', '.join(labels_disp)}")
+        print()
+        print("   Entidades detectadas en tu consulta:")
+        for _, (valor, score, label, _) in entidades_previas.items():
+            print(f"      • {label:<20} → {valor}  (confianza: {score:.2f})")
+        print()
+        confirmar = _input_sn(
+            "   ¿Confirmar? (S = confirmar / N = reformular / Enter = omitir filtros): ",
+            con_enter=True,
+        )
+        if confirmar == "S":
+            return texto_previo, entidades_previas
+        if confirmar == "":
+            return "", {}
+        # N → caer al prompt normal para que el usuario especifique desde cero
+        print()
+
+    print(f"Para refinar tu consulta podrías indicarme: {', '.join(labels_disp)}")
+    print("Presione Enter para ejecutar la consulta base.")
+
+    while True:
+        texto = _input("   Su consulta: ").strip()
+        if not texto:
+            return "", {}
+
+        print()
+        print("   Analizando texto...")
+        detectados = extraer_entidades(texto, parametros, filtro_fijo_key)
+
+        if not detectados:
+            print(
+                "   ⚠  No se detectaron entidades reconocibles.\n"
+                "   Intente reformular o presione Enter para omitir filtros."
+            )
+            continue
+
+        print()
+        print("   Entidades detectadas:")
+        for _, (valor, score, label, _) in detectados.items():
+            print(f"      • {label:<20} → {valor}  (confianza: {score:.2f})")
+
+        print()
+        confirmar = _input_sn(
+            "   ¿Confirmar? (S = confirmar / N = reformular / Enter = omitir): ",
+            con_enter=True,
+        )
+
+        if confirmar == "S":
+            return texto, detectados
+        if confirmar == "":
+            return "", {}
+        # N u otro → reformular
+
 
 # ── Identificación de usuario ──────────────────────────────────────────────────
 def identificar_usuario() -> tuple[str, str, str | None, float | None]:
@@ -806,6 +935,43 @@ def identificar_usuario() -> tuple[str, str, str | None, float | None]:
                 f"(mejor similitud: {score:.2f}, umbral: {tipo['umbral']:.2f}).\n"
                 "   Verifique e intente nuevamente.\n"
             )
+
+
+# ── Selección de catálogo ──────────────────────────────────────────────────────
+def seleccionar_catalogo(catalogos: list[str]) -> str | None:
+    print()
+    _sep()
+    print("❓ ¿Qué desea consultar hoy?")
+    for c in catalogos:
+        print(f"   {c}. {CATALOG_LABELS[c]}")
+    print()
+    opcion = _input("Opción: ").strip().upper()
+    if opcion not in catalogos:
+        print("⚠  Opción no válida.")
+        return None
+    return opcion
+
+
+# ── Selección de pregunta ──────────────────────────────────────────────────────
+def seleccionar_pregunta(catalogo_key: str) -> dict | None:
+    catalogo = USE_CASES["options"].get(catalogo_key)
+    if not catalogo:
+        return None
+    preguntas = catalogo.get("preguntas", [])
+    print()
+    print(f"📋 OPCIONES DE {CATALOG_LABELS[catalogo_key].upper()}:")
+    for p in preguntas:
+        print(f"   {p['id']} - {p['texto']}")
+    print(f"   0 - Volver al menú principal")
+    print()
+    opcion = _input("Seleccione una opción: ").strip().upper()
+    if opcion == "0":
+        return None
+    for p in preguntas:
+        if p["id"].upper() == opcion:
+            return p
+    print("⚠  Opción no válida.")
+    return None
 
 
 # ── Construcción de SQL con LLM ───────────────────────────────────────────────
@@ -1077,7 +1243,7 @@ def ejecutar_rag(
     query_log=None,
     agency_name: str | None = None,
     tipo_key: str = "3",
-) -> str:
+) -> None:
     coleccion_nombre = pregunta_config.get("coleccion_chroma", "documentos_normativos")
     carrier_detection = pregunta_config.get("carrier_detection", False)
     carrier_umbral = pregunta_config.get("carrier_detection_umbral", 0.55)
@@ -1091,7 +1257,7 @@ def ejecutar_rag(
         collection = chroma_client.get_collection(coleccion_nombre)
     except Exception as exc:
         print(f"❌ No se pudo conectar a ChromaDB: {exc}")
-        return ""
+        return
 
     model = _get_embed_model()
     border = "─" * _BOX_W
@@ -1110,7 +1276,7 @@ def ejecutar_rag(
                 where_filter = {"carrier": carrier_match}
                 if query_log:
                     query_log.rag_carrier = carrier_match
-                #print(f"   Carrier detectado: {carrier_match} (confianza: {carrier_score:.2f})")
+                print(f"   Carrier detectado: {carrier_match} (confianza: {carrier_score:.2f})")
 
     where_filter = _aplicar_filtro_agencia(pregunta_config, where_filter, agency_name, tipo_key)
 
@@ -1123,7 +1289,7 @@ def ejecutar_rag(
         )
     except Exception as exc:
         print(f"❌ Error al consultar ChromaDB: {exc}")
-        return ""
+        return
 
     if query_log:
         query_log.latencia_rag_ms = int((time.perf_counter() - _t_rag) * 1000)
@@ -1138,7 +1304,7 @@ def ejecutar_rag(
     print()
     if not docs:
         print("   No se encontraron documentos relacionados con tu consulta.")
-        return ""
+        return
     """
     print(f"📄 RESULTADOS ENCONTRADOS (Top {len(docs)}):")
     print()
@@ -1190,12 +1356,9 @@ def ejecutar_rag(
         if query_log:
             query_log.latencia_respuesta_ms = int((time.perf_counter() - _t_resp) * 1000)
             query_log.llm_respuesta = response.text
-        texto_respuesta = response.text.strip()
-        print(texto_respuesta)
-        return texto_respuesta
+        print(response.text.strip())
     except Exception as exc:
         print(f"❌ Error al generar respuesta: {exc}")
-        return ""
 
 
 # ── Ejecución silenciosa para flujos múltiples ────────────────────────────────
@@ -1359,12 +1522,12 @@ def ejecutar_multiple(
     entidades_previas: dict | None = None,
     tipo_key: str = "3",
     agency_name: str | None = None,
-) -> str:
+) -> None:
     """Ejecuta en paralelo todos los sub-casos declarados en 'invoca' y sintetiza la respuesta."""
     invoca_ids = pregunta_multiple.get("invoca", [])
     if not invoca_ids:
         print("⚠  Este flujo no tiene sub-consultas configuradas.")
-        return ""
+        return
 
     catalogo = USE_CASES["options"].get(catalogo_key, {})
     preguntas_map = {p["id"]: p for p in catalogo.get("preguntas", [])}
@@ -1372,7 +1535,7 @@ def ejecutar_multiple(
 
     if not sub_preguntas:
         print("⚠  No se encontraron las sub-consultas referenciadas.")
-        return ""
+        return
 
     # Construir entidades por sub-caso: cada uno usa solo sus propios parametros
     entidades_combinadas: dict = entidades_previas or {}
@@ -1438,7 +1601,6 @@ def ejecutar_multiple(
     print("RESULTADO:")
     _sep()
     print(respuesta)
-    return respuesta
 
 
 # ── Ciclo principal de consultas ───────────────────────────────────────────────
@@ -1471,69 +1633,56 @@ def ciclo_consultas(
         print()
         print("  Analizando su consulta...")
 
-        # Pasa el último intercambio (pregunta + respuesta real) al rewriter para
-        # que pueda heredar filtros mencionados antes (ej. estado, línea de negocio).
-        # La Regla 2 del prompt ya deja la query intacta si está completa por sí sola.
-        user_query_efectiva = reescribir_consulta(_historial_reciente[-2:], user_query)
-        #if user_query_efectiva != user_query:
-            #print(f"  #--DEBUG Consulta reescrita: {user_query_efectiva}")
+        # Solo pasa la última entrada al rewriter para evitar que el LLM elija
+        # una query más antigua (y semánticamente "más relevante") en vez de la inmediata anterior.
+        # Funciona porque las queries reescritas ya acumulan contexto acumulativo.
+        # Queries de más de 4 palabras son completas por sí solas — no necesitan reescritura.
+        if len(user_query.split()) > 4:
+            user_query_efectiva = user_query
+        else:
+            user_query_efectiva = reescribir_consulta(_historial_reciente[-1:], user_query)
+        if user_query_efectiva != user_query:
+            print(f"  #--DEBUG Consulta reescrita: {user_query_efectiva}")
 
-        # ── Agente 1 + Agente 2: identificación del caso de uso y confirmación ────
-        # Itera indefinidamente, afinando la clasificación con cada respuesta del
-        # usuario, hasta que confirme explícitamente un caso de uso. No hay límite
-        # de reintentos: el usuario sale del loop solo confirmando, o con un
-        # comando global (salir, volver, nueva sesión), manejado por _input().
-        query_clasificar = user_query_efectiva
-        intentos_confirmacion = 0
+        _t = time.perf_counter()
+        # Queries largas (>7 palabras): user_query_efectiva == user_query (el rewrite se saltó),
+        # por lo que no hay riesgo de contaminación del historial.
+        # Queries cortas (≤7 palabras): user_query_efectiva lleva el contexto del rewrite
+        # y es la que tiene sentido normalizar.
+        normalized = transformar_consulta_con_llm(user_query_efectiva)
+        q.latencia_normalizacion_ms = int((time.perf_counter() - _t) * 1000)
+        q.query_normalizado = normalized
 
-        es_turno_meta = False
+        print(f"  #--DEBUG Pregunta Formateada: {normalized}")
 
-        while True:
-            _t = time.perf_counter()
-            use_case_entry, mensaje_confirmacion, es_meta = seleccionar_caso_de_uso_llm(query_clasificar, catalogos)
-            q.latencia_deteccion_ms = int((time.perf_counter() - _t) * 1000)
-            q.caso_exitoso = use_case_entry is not None
-            q.confirmacion_mensaje = mensaje_confirmacion
+        _t = time.perf_counter()
+        use_case_entry, score = detectar_caso_de_uso(normalized, catalogos)
+        q.latencia_deteccion_ms = int((time.perf_counter() - _t) * 1000)
+        q.caso_score = score
+        q.caso_exitoso = use_case_entry is not None
 
-            if use_case_entry is not None:
-                q.caso_nombre = use_case_entry["nombre"]
-                q.caso_catalogo = use_case_entry.get("catalogo")
-
+        if use_case_entry is None:
             print()
-            print(f"  {mensaje_confirmacion}")
-
-            if es_meta:
-                # Pregunta conversacional sobre el propio asistente (quién eres, qué
-                # puedes hacer, etc.): el mensaje ya es la respuesta final, no hay nada
-                # que confirmar ni ejecutar.
-                es_turno_meta = True
+            print("  No fue posible identificar un flujo asociado a su solicitud. Puede reformular su mensaje para intentar nuevamente el proceso automatizado, o escalar su caso a un agente humano para obtener asistencia personalizada.")
+            print()
+            print("  Por favor reformule su consulta con más detalle.")
+            q.reiniciar_timer()  # excluir el tiempo de espera del usuario al decidir si reintenta
+            otra = _input_sn("  ¿Desea intentar de nuevo? (S/N): ")
+            if otra != "S":
+                print()
+                print("Gracias por utilizar el Sistema de Consultas IA. ¡Hasta pronto!")
+                get_session().cerrar_consulta()
                 break
-
-            q.reiniciar_timer()  # excluir el tiempo de espera del usuario al responder
-            respuesta_usuario = _input("  Su respuesta: ").strip()
-            if not respuesta_usuario:
-                continue  # vuelve a mostrar la misma propuesta y pide respuesta de nuevo
-
-            interpretacion = _interpretar_confirmacion(mensaje_confirmacion, respuesta_usuario)
-            q.confirmado = interpretacion["confirmado"]
-            intentos_confirmacion += 1
-            q.intentos_confirmacion = intentos_confirmacion
-
-            if interpretacion["confirmado"] and use_case_entry is not None:
-                break  # caso de uso confirmado, se sale del loop para ejecutar
-
-            # No confirmó: usa el ajuste sugerido o, si no hay, su respuesta libre
-            # como nueva consulta a clasificar, y vuelve a intentar.
-            query_clasificar = interpretacion["query_ajustada"] or respuesta_usuario
-
-        if es_turno_meta:
-            _historial_reciente.append({"role": "user", "content": user_query_efectiva})
-            _historial_reciente.append({"role": "assistant", "content": mensaje_confirmacion[:300]})
-            _historial_reciente = _historial_reciente[-4:]
             get_session().cerrar_consulta()
             continue
 
-        pregunta = use_case_entry["pregunta"]
+        nombre_caso = use_case_entry["nombre"]
+        pregunta    = use_case_entry["pregunta"]
+        q.caso_nombre   = nombre_caso
+        q.caso_catalogo = use_case_entry.get("catalogo")
+
+        _historial_reciente.append({"role": "user", "content": user_query_efectiva})
+        _historial_reciente = _historial_reciente[-4:]
 
         # Pre-detectar entidades (solo para SQL individual).
         # Usa la query reescrita para capturar entidades de follow-ups ambiguos
@@ -1550,6 +1699,11 @@ def ciclo_consultas(
                 {"param": p, "label": v[2], "valor": v[0], "score": v[1]}
                 for p, v in entidades_previas.items()
             ]
+
+        # Mostrar flujo identificado + sub-casos o entidades según el tipo
+        print()
+#       print(f'  Se ha identificado el flujo: "{nombre_caso}" - (Nivel de coincidencia: {score:.2f})')
+        print(f'  Tu pregunta se ha identificado mediante el flujo: {nombre_caso} con un nivel de coincidencia del {score:.2f}%.')
 
         if tipo_pregunta == "multiple":
             catalogo_actual = USE_CASES["options"].get(use_case_entry["catalogo"], {})
@@ -1599,11 +1753,10 @@ def ciclo_consultas(
         q.tipo_ejecucion = tipo_pregunta
 
         try:
-            # ── Validación de filtros obligatorios ────────────────────────────
-            # Si falta un dato obligatorio para este caso de uso, no hay nada que
-            # confirmar: se le pide directamente al usuario y se reinicia el
-            # pipeline completo (Agente 1 vuelve a clasificar) con la nueva consulta.
+            # ── Validación de filtros requeridos + confirmación ───────────────
             filtros_req_pre = pregunta.get("filtros_requeridos", [])
+            confirmar = None
+
             if filtros_req_pre and tipo_pregunta != "rag" and not all(p in entidades_previas for p in filtros_req_pre):
                 labels_req_pre = [PARAM_TO_FILTRO[p][1] for p in filtros_req_pre if p in PARAM_TO_FILTRO]
                 lbl_slash_pre = "/".join(labels_req_pre)
@@ -1617,6 +1770,14 @@ def ciclo_consultas(
                 _next_query = nueva_query
                 get_session().cerrar_consulta()
                 continue  # reinicia el pipeline completo con la nueva consulta
+            else:
+                print()
+                confirmar = _input_sn(
+                    " ¿Desea Confirmar? (S = confirmar / N = reformular pregunta): ",
+                    con_enter=True,
+                )
+                if confirmar == "N":
+                    raise VoverError
             # ─────────────────────────────────────────────────────────────────
 
             # Reiniciar timer: excluir el tiempo que el usuario tardó en confirmar
@@ -1625,28 +1786,23 @@ def ciclo_consultas(
             if tipo_pregunta == "multiple":
                 print()
                 print("  Procesando su consulta, por favor espere...")
-                respuesta_mostrada = ejecutar_multiple(
+                ejecutar_multiple(
                     pregunta, use_case_entry["catalogo"], sql_filtro, filtro_fijo_key, user_query,
                     entidades_previas, tipo_key=tipo_key, agency_name=agency_name,
                 )
             elif tipo_pregunta == "rag":
-                respuesta_mostrada = ejecutar_rag(
-                    pregunta, user_query, query_log=q, agency_name=agency_name, tipo_key=tipo_key
-                )
+                ejecutar_rag(pregunta, user_query, query_log=q, agency_name=agency_name, tipo_key=tipo_key)
             else:
+                texto_usuario = user_query if confirmar == "S" else ""
+                entidades    = entidades_previas if confirmar == "S" else {}
+
                 print()
                 print("  Procesando su consulta, por favor espere...")
-                respuesta_mostrada = ejecutar_consulta(
-                    pregunta, sql_filtro, entidades_previas, user_query, query_log=q, tipo_key=tipo_key
-                )
+                respuesta = ejecutar_consulta(pregunta, sql_filtro, entidades, texto_usuario, query_log=q, tipo_key=tipo_key)
                 print()
                 print("RESULTADO:")
                 _sep()
-                print(respuesta_mostrada)
-
-            _historial_reciente.append({"role": "user", "content": user_query_efectiva})
-            _historial_reciente.append({"role": "assistant", "content": (respuesta_mostrada or "")[:300]})
-            _historial_reciente = _historial_reciente[-4:]
+                print(respuesta)
         except VoverError:
             print()
             print("  Volviendo al menú principal...")
@@ -1657,12 +1813,12 @@ def ciclo_consultas(
         get_session().cerrar_consulta()
 
         print()
-        siguiente = _input("¿Hay algo más en lo que pueda ayudarte? ").strip()
-        if not siguiente or siguiente.lower() in _PALABRAS_NO:
+        continuar = _input_sn("¿Desea realizar otra consulta? (S/N): ")
+        if continuar != "S":
             print()
             print("Gracias por utilizar el Sistema de Consultas IA. ¡Hasta pronto!")
             break
-        _next_query = siguiente
+        print()
 
 
 # ── Punto de entrada ───────────────────────────────────────────────────────────

@@ -5,9 +5,9 @@ from dotenv import load_dotenv
 from sentence_transformers import SentenceTransformer
 from pypdf import PdfReader
 
-# =========================================================
+
 # CONFIG
-# =========================================================
+
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PDF_DIR = os.path.join(BASE_DIR, "pdf")
@@ -21,9 +21,9 @@ EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 CHUNK_SIZE = 500
 MAX_CHARS_PER_CHUNK = 600
 
-# =========================================================
+
 # DOCUMENT CONFIGURATION
-# =========================================================
+
 
 DOCUMENTS = [
     {
@@ -547,9 +547,9 @@ DOCUMENTS = [
     }
     ]
 
-# =========================================================
+
 # PDF EXTRACTION
-# =========================================================
+
 
 def extract_pages(pdf_path: str) -> list[tuple[int, str]]:
     reader = PdfReader(pdf_path)
@@ -564,9 +564,9 @@ def extract_pages(pdf_path: str) -> list[tuple[int, str]]:
 
     return pages
 
-# =========================================================
+
 # CHUNKING METHODS
-# =========================================================
+
 
 def sentence_chunks(text: str) -> list[str]:
     sentences = re.split(r'(?<=[.!?:])\s+', text.strip())
@@ -629,17 +629,17 @@ def generate_chunks(text: str, strategy: str) -> list[str]:
     else:
         raise ValueError(f"Estrategia desconocida: {strategy}")
 
-# =========================================================
+
 # CHROMA
-# =========================================================
+
 
 chroma_client = ChromaClient(path=os.getenv("CHROMA_PATH", "./chroma_db"))
 
 model = SentenceTransformer(EMBEDDING_MODEL)
 
-# =========================================================
+
 # PROCESS DOCUMENTS
-# =========================================================
+
 
 for doc_config in DOCUMENTS:
 
@@ -769,8 +769,8 @@ for doc_config in DOCUMENTS:
         f"→ {total_chunks} chunks"
     )
 
-# =========================================================
+
 # DONE
-# =========================================================
+
 
 print("\nProcesamiento completado.")

@@ -8,7 +8,7 @@ from pathlib import Path
 LOG_DIR = Path(__file__).parent.parent / "logs"
 LOG_DIR.mkdir(exist_ok=True)
 
-_BQ_TABLE = "claroinsurance-dataplatform.claro_IA.model_tracking"
+_BQ_TABLE = "claroinsurance-dataplatform.claro_IA.model_tracking_poc"
 
 
 class QueryLog:
@@ -24,8 +24,10 @@ class QueryLog:
         self.query_normalizado: str = ""
         self.caso_catalogo: str | None = None
         self.caso_nombre: str | None = None
-        self.caso_score: float | None = None
         self.caso_exitoso: bool = False
+        self.confirmacion_mensaje: str | None = None
+        self.confirmado: bool | None = None
+        self.intentos_confirmacion: int = 0
         self.entidades: list[dict] = []
         self.tipo_ejecucion: str | None = None   # "sql", "rag", "multiple"
         self.sql_intentos: int = 0
@@ -67,8 +69,10 @@ class QueryLog:
             "query_normalizado": self.query_normalizado,
             "caso_catalogo": self.caso_catalogo,
             "caso_nombre": self.caso_nombre,
-            "caso_score": self.caso_score,
             "caso_exitoso": self.caso_exitoso,
+            "confirmacion_mensaje": self.confirmacion_mensaje,
+            "confirmado": self.confirmado,
+            "intentos_confirmacion": self.intentos_confirmacion,
             "entidades_json": json.dumps(self.entidades, ensure_ascii=False),
             "tipo_ejecucion": self.tipo_ejecucion,
             "sql_intentos": self.sql_intentos,
@@ -147,8 +151,8 @@ def _flush_bq(q: QueryLog) -> None:
         )
         job = client.load_table_from_json([q.to_dict()], _BQ_TABLE, job_config=job_config)
         job.result()
-    except Exception:
-        pass
+    except Exception as exc:
+        print(f"   ⚠  No se pudo registrar la consulta en BigQuery ({_BQ_TABLE}): {exc}")
 
 
 _session: SessionLogger | None = None

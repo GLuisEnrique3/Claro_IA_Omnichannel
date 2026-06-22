@@ -3,7 +3,7 @@ import time
 import json
 import hashlib
 from pathlib import Path
-_ROOT = Path(__file__).parent.parent
+_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_ROOT))
 
 import streamlit as st
@@ -16,9 +16,9 @@ from main import (
     USE_CASES,
     PARAM_TO_FILTRO,
     _buscar_semantico,
-    transformar_consulta_con_llm,
     reescribir_consulta,
-    detectar_caso_de_uso,
+    seleccionar_caso_de_uso_llm,
+    _interpretar_confirmacion,
     extraer_entidades,
 )
 from app.engine import sql_response, rag_response, multiple_response
@@ -208,7 +208,7 @@ def _ejecutar_pending(pending: dict, query_log=None) -> tuple[str, dict]:
 
 
 # ── Acceso a la aplicación (primer gate) ──────────────────────────────────────
-_USERS_FILE = Path(__file__).parent / "users.json"
+_USERS_FILE = Path(__file__).resolve().parent / "users.json"
 
 
 def _load_users() -> dict:
@@ -396,19 +396,18 @@ def _render_sidebar():
             st.markdown("**✏️ Query reescrita**")
             st.info(reescrita)
 
-        st.markdown("**🔄 Query normalizada**")
-        st.code(d.get("query_normalizada", "—"), language=None)
+        st.markdown("**🤖 Mensaje del Agente 1 (selección de caso de uso)**")
+        st.code(d.get("mensaje_confirmacion", "—"), language=None)
 
         flujo = d.get("flujo_nombre")
-        score = d.get("flujo_score")
         catalogo = d.get("flujo_catalogo")
         if flujo:
             st.markdown("**🎯 Flujo detectado**")
             st.success(f"{flujo}")
-            st.caption(f"Score: {score:.4f}  |  Catálogo: {catalogo or '—'}")
+            st.caption(f"Catálogo: {catalogo or '—'}")
         else:
             st.markdown("**🎯 Flujo detectado**")
-            st.error(f"Sin coincidencia (score: {score:.4f})" if score is not None else "Sin coincidencia")
+            st.error("Sin coincidencia")
 
         st.markdown("**⚙️ Tipo de ejecución**")
         tipo = d.get("tipo_ejecucion", "—")
@@ -521,102 +520,18 @@ def show_chat():
         scrolling=False,
     )
 
-    # Confirmación pendiente
-    if st.session_state.pending:
-        pending = st.session_state.pending
-        use_case_entry = pending["use_case_entry"]
-        nombre_caso = use_case_entry["nombre"]
-        score = pending["score"]
-        entidades = pending["entidades"]
-        tipo_pregunta = use_case_entry["pregunta"].get("tipo")
+    # Propuesta pendiente (si hay una, ya está en st.session_state.messages y se
+    # mostró en el loop de arriba). La confirmación/corrección se escribe en el
+    # mismo cuadro de texto de abajo, igual que "Su respuesta:" en main.py.
+    pending = st.session_state.pending
+    placeholder = "Tu respuesta..." if pending else "¿Qué desea consultar?"
 
-        with st.chat_message("assistant"):
-            st.markdown(f"Detecté el flujo: **{nombre_caso}** (confianza: {score:.2f})")
-
-            if tipo_pregunta == "multiple":
-                catalogo_actual = USE_CASES["options"].get(use_case_entry["catalogo"], {})
-                preguntas_map = {p["id"]: p for p in catalogo_actual.get("preguntas", [])}
-                sub_nombres = [
-                    preguntas_map[i]["texto"]
-                    for i in use_case_entry["pregunta"].get("invoca", [])
-                    if i in preguntas_map
-                ]
-                st.markdown(f"Se ejecutarán **{len(sub_nombres)}** consultas en paralelo:")
-                for n in sub_nombres:
-                    st.markdown(f"&nbsp;&nbsp;&nbsp;• {n}")
-
-            if entidades:
-                st.markdown("**Entidades detectadas:**")
-                for _, (val, sc, lbl, _) in entidades.items():
-                    st.markdown(f"&nbsp;&nbsp;&nbsp;• **{lbl}:** {val} &nbsp;_(confianza: {sc:.2f})_")
-            else:
-                st.markdown("_Sin entidades adicionales detectadas._")
-
-            st.markdown("")
-            col1, col2 = st.columns([1, 4])
-            with col1:
-                confirmar = st.button("✅ Confirmar", type="primary", key="btn_confirm")
-            with col2:
-                reformular = st.button("✏️ Reformular", key="btn_reformulate")
-
-        if confirmar:
-            logger = st.session_state.session_logger
-            q = logger.nueva_consulta() if logger else None
-
-            if q:
-                d = st.session_state.debug_info
-                q.query_original            = pending["user_query"]
-                q.query_reescrita           = d.get("query_reescrita", "")
-                q.query_normalizado         = d.get("query_normalizada", "")
-                q.caso_nombre               = nombre_caso
-                q.caso_catalogo             = use_case_entry.get("catalogo")
-                q.caso_score                = score
-                q.caso_exitoso              = True
-                q.tipo_ejecucion            = tipo_pregunta
-                q.latencia_normalizacion_ms = d.get("latencia_normalizacion_ms")
-                q.latencia_deteccion_ms     = d.get("latencia_deteccion_ms")
-                q.latencia_entidades_ms     = d.get("latencia_entidades_ms")
-                q.entidades                 = [
-                    {"param": p, "label": v[2], "valor": v[0], "score": v[1]}
-                    for p, v in entidades.items()
-                ]
-
-            st.session_state.debug_info["estado"] = "⚙️ Ejecutando..."
-            tipo_label = {"sql": "Consultando base de datos...", "rag": "Buscando en documentos...", "multiple": "Ejecutando consultas en paralelo..."}.get(tipo_pregunta, "Procesando...")
-            with st.status(tipo_label, expanded=True) as _status:
-                st.write("Generando respuesta con IA...")
-                respuesta, exec_debug = _ejecutar_pending(pending, query_log=q)
-                st.session_state.debug_info.update(exec_debug)
-                _status.update(label="Listo", state="complete", expanded=False)
-
-            if q:
-                logger.cerrar_consulta()
-
-            st.session_state.debug_info["estado"] = "✅ Completado"
-            st.session_state.messages.append({"role": "user", "content": pending["user_query"]})
-            st.session_state.messages.append({
-                "role": "assistant",
-                "content": f"**{nombre_caso}**\n\n{respuesta}",
-            })
-            st.session_state.pending = None
-            st.rerun()
-
-        if reformular:
-            st.session_state.messages.append({"role": "user", "content": pending["user_query"]})
-            st.session_state.messages.append({
-                "role": "assistant",
-                "content": "Entendido, reformulá tu consulta con más detalle.",
-            })
-            st.session_state.pending = None
-            st.rerun()
-
-        return  # No mostrar chat_input mientras hay confirmación pendiente
-
-    # Input de nueva consulta
-    if user_query := st.chat_input("¿Qué desea consultar?"):
+    if user_query := st.chat_input(placeholder):
         q_lower = user_query.strip().lower()
 
-        # ── Keywords especiales ────────────────────────────────────────────────
+        # ── Keywords especiales (interceptan siempre, incluso con una propuesta
+        # pendiente — igual que _input() en main.py, que no altera el loop de
+        # confirmación cuando el usuario saluda o pide instrucciones) ──────────
         if q_lower in _KW_SALIR or q_lower in _KW_VOLVER:
             _logout()
             return
@@ -662,107 +577,208 @@ def show_chat():
             return
         # ──────────────────────────────────────────────────────────────────────
 
-        catalogos = st.session_state.catalogos
-        filtro_fijo_key = st.session_state.filtro_fijo_key
+        if pending is None:
+            _procesar_nueva_consulta(user_query)
+        else:
+            _procesar_respuesta_confirmacion(user_query, pending)
 
-        # Inicializar debug con query original
-        st.session_state.debug_info = {"query_original": user_query, "estado": "⏳ Analizando..."}
 
-        with st.status("Analizando tu consulta...", expanded=True) as _status:
-            st.write("Normalizando lenguaje natural...")
-            _hist = [
-                {"role": m["role"], "content": m["content"][:200].replace("\n", " ")}
-                for m in st.session_state.messages[-4:]
-            ]
-            _t0 = time.perf_counter()
-            user_query_efectiva = reescribir_consulta(_hist, user_query)
-            if user_query_efectiva != user_query:
-                st.session_state.debug_info["query_reescrita"] = user_query_efectiva
-            normalized = transformar_consulta_con_llm(user_query_efectiva)
-            st.session_state.debug_info["latencia_normalizacion_ms"] = int((time.perf_counter() - _t0) * 1000)
+def _procesar_nueva_consulta(user_query: str) -> None:
+    """Primer turno: reescritura + Agente 1. Si encuentra un caso de uso, queda
+    'pending' a la espera de que el usuario confirme con texto libre."""
+    catalogos = st.session_state.catalogos
 
-            st.write("Detectando flujo de respuesta...")
-            _t1 = time.perf_counter()
-            use_case_entry, score = detectar_caso_de_uso(normalized, catalogos)
-            st.session_state.debug_info["latencia_deteccion_ms"] = int((time.perf_counter() - _t1) * 1000)
-            _status.update(label="Análisis completado", state="complete", expanded=False)
+    st.session_state.debug_info = {"query_original": user_query, "estado": "⏳ Analizando..."}
 
-        # Actualizar debug con normalización y detección
-        st.session_state.debug_info["query_normalizada"] = normalized
-        st.session_state.debug_info["flujo_score"] = score
+    with st.status("Analizando tu consulta...", expanded=True) as _status:
+        _hist = [
+            {"role": m["role"], "content": m["content"][:200].replace("\n", " ")}
+            for m in st.session_state.messages[-4:]
+        ]
+        user_query_efectiva = reescribir_consulta(_hist, user_query)
+        if user_query_efectiva != user_query:
+            st.session_state.debug_info["query_reescrita"] = user_query_efectiva
 
-        if use_case_entry is None:
-            st.session_state.debug_info.update({
-                "flujo_nombre": None,
-                "flujo_catalogo": None,
-                "tipo_ejecucion": None,
-                "entidades": {},
-                "estado": "❌ Sin flujo detectado",
-            })
-            st.session_state.messages.append({"role": "user", "content": user_query})
-            st.session_state.messages.append({
-                "role": "assistant",
-                "content": (
-                    "No pude identificar un flujo para tu consulta. "
-                    "Podés reformularla con más detalle, o escribir "
-                    "**escalar a un humano** para obtener asistencia personalizada."
-                ),
-            })
-            st.rerun()
-            return
+        st.write("Identificando el caso de uso...")
+        _t1 = time.perf_counter()
+        use_case_entry, mensaje_confirmacion, es_meta = seleccionar_caso_de_uso_llm(user_query_efectiva, catalogos)
+        st.session_state.debug_info["latencia_deteccion_ms"] = int((time.perf_counter() - _t1) * 1000)
+        _status.update(label="Análisis completado", state="complete", expanded=False)
 
-        pregunta = use_case_entry["pregunta"]
-        tipo_pregunta = pregunta.get("tipo")
+    st.session_state.messages.append({"role": "user", "content": user_query})
+    st.session_state.debug_info["mensaje_confirmacion"] = mensaje_confirmacion
 
-        # Extraer entidades según el tipo de flujo
-        entidades: dict = {}
-        _t2 = time.perf_counter()
-        if tipo_pregunta == "sql":
-            entidades = extraer_entidades(user_query_efectiva, pregunta.get("parametros", []), filtro_fijo_key)
-        elif tipo_pregunta == "multiple":
-            catalogo_actual = USE_CASES["options"].get(use_case_entry["catalogo"], {})
-            preguntas_map = {p["id"]: p for p in catalogo_actual.get("preguntas", [])}
-            sub_pqs = [preguntas_map[i] for i in pregunta.get("invoca", []) if i in preguntas_map]
-            for sp in sub_pqs:
-                if sp.get("tipo") == "sql" and sp.get("parametros"):
-                    sub_ents = extraer_entidades(user_query, sp["parametros"], filtro_fijo_key)
-                    for param, val in sub_ents.items():
-                        if param not in entidades:
-                            entidades[param] = val
-        st.session_state.debug_info["latencia_entidades_ms"] = int((time.perf_counter() - _t2) * 1000)
-
-        # Actualizar debug con todo el contexto detectado
+    if use_case_entry is None:
         st.session_state.debug_info.update({
-            "flujo_nombre": use_case_entry["nombre"],
-            "flujo_catalogo": use_case_entry.get("catalogo"),
-            "tipo_ejecucion": tipo_pregunta,
-            "entidades": entidades,
-            "estado": "⏳ Esperando confirmación",
+            "flujo_nombre": None,
+            "flujo_catalogo": None,
+            "tipo_ejecucion": None,
+            "entidades": {},
+            "estado": "💬 Conversacional" if es_meta else "❌ Sin flujo detectado",
         })
-
-        # Validar filtros requeridos
-        filtros_req = pregunta.get("filtros_requeridos", [])
-        if filtros_req and tipo_pregunta != "rag" and not all(p in entidades for p in filtros_req):
-            labels_req = [PARAM_TO_FILTRO[p][1] for p in filtros_req if p in PARAM_TO_FILTRO]
-            st.session_state.messages.append({"role": "user", "content": user_query})
-            st.session_state.messages.append({
-                "role": "assistant",
-                "content": (
-                    f"Esta consulta requiere que especifiques: **{' / '.join(labels_req)}**. "
-                    "Por favor reformulá tu pregunta incluyendo esa información."
-                ),
-            })
-            st.rerun()
-            return
-
-        st.session_state.pending = {
+        st.session_state.messages.append({"role": "assistant", "content": mensaje_confirmacion})
+        # Si no es meta, seguimos negociando (igual que main.py: nunca se rinde,
+        # la próxima respuesta del usuario se usa para reclasificar).
+        st.session_state.pending = None if es_meta else {
             "user_query": user_query,
-            "normalized": normalized,
-            "use_case_entry": use_case_entry,
-            "entidades": entidades,
-            "score": score,
+            "user_query_efectiva": user_query_efectiva,
+            "use_case_entry": None,
+            "mensaje_confirmacion": mensaje_confirmacion,
         }
         st.rerun()
+        return
+
+    st.session_state.debug_info.update({
+        "flujo_nombre": use_case_entry["nombre"],
+        "flujo_catalogo": use_case_entry.get("catalogo"),
+        "estado": "⏳ Esperando confirmación",
+    })
+    st.session_state.pending = {
+        "user_query": user_query,
+        "user_query_efectiva": user_query_efectiva,
+        "use_case_entry": use_case_entry,
+        "mensaje_confirmacion": mensaje_confirmacion,
+    }
+    st.session_state.messages.append({"role": "assistant", "content": mensaje_confirmacion})
+    st.rerun()
+
+
+def _procesar_respuesta_confirmacion(respuesta_usuario: str, pending: dict) -> None:
+    """Agente 2: interpreta la respuesta a la propuesta pendiente. Si confirma,
+    ejecuta; si no, reclasifica con el ajuste (o la respuesta libre) y vuelve a
+    proponer — sin límite de intentos, igual que el loop de main.py."""
+    st.session_state.messages.append({"role": "user", "content": respuesta_usuario})
+
+    mensaje_confirmacion = pending["mensaje_confirmacion"]
+    use_case_entry = pending["use_case_entry"]
+
+    with st.spinner("Procesando tu respuesta..."):
+        interpretacion = _interpretar_confirmacion(mensaje_confirmacion, respuesta_usuario)
+
+    if interpretacion["confirmado"] and use_case_entry is not None:
+        _confirmar_y_ejecutar(pending)
+        return
+
+    nueva_query_clasificar = interpretacion["query_ajustada"] or respuesta_usuario
+    catalogos = st.session_state.catalogos
+
+    with st.spinner("Afinando tu consulta..."):
+        nuevo_use_case_entry, nuevo_mensaje, es_meta = seleccionar_caso_de_uso_llm(nueva_query_clasificar, catalogos)
+
+    if es_meta:
+        st.session_state.debug_info.update({"estado": "💬 Conversacional"})
+        st.session_state.messages.append({"role": "assistant", "content": nuevo_mensaje})
+        st.session_state.pending = None
+        st.rerun()
+        return
+
+    st.session_state.debug_info["mensaje_confirmacion"] = nuevo_mensaje
+    st.session_state.debug_info.update({
+        "flujo_nombre": nuevo_use_case_entry["nombre"] if nuevo_use_case_entry else None,
+        "flujo_catalogo": nuevo_use_case_entry.get("catalogo") if nuevo_use_case_entry else None,
+        "estado": "⏳ Esperando confirmación" if nuevo_use_case_entry else "❌ Sin flujo detectado",
+    })
+
+    st.session_state.pending = {
+        **pending,
+        "use_case_entry": nuevo_use_case_entry,
+        "mensaje_confirmacion": nuevo_mensaje,
+    }
+    st.session_state.messages.append({"role": "assistant", "content": nuevo_mensaje})
+    st.rerun()
+
+
+def _confirmar_y_ejecutar(pending: dict) -> None:
+    """Caso de uso confirmado: extrae entidades (una sola vez, con la query
+    reescrita del primer turno), valida filtros obligatorios y ejecuta."""
+    use_case_entry = pending["use_case_entry"]
+    pregunta = use_case_entry["pregunta"]
+    tipo_pregunta = pregunta.get("tipo")
+    user_query = pending["user_query"]
+    user_query_efectiva = pending["user_query_efectiva"]
+    filtro_fijo_key = st.session_state.filtro_fijo_key
+
+    entidades: dict = {}
+    _t2 = time.perf_counter()
+    if tipo_pregunta == "sql":
+        entidades = extraer_entidades(user_query_efectiva, pregunta.get("parametros", []), filtro_fijo_key)
+    elif tipo_pregunta == "multiple":
+        catalogo_actual = USE_CASES["options"].get(use_case_entry["catalogo"], {})
+        preguntas_map = {p["id"]: p for p in catalogo_actual.get("preguntas", [])}
+        sub_pqs = [preguntas_map[i] for i in pregunta.get("invoca", []) if i in preguntas_map]
+        for sp in sub_pqs:
+            if sp.get("tipo") == "sql" and sp.get("parametros"):
+                sub_ents = extraer_entidades(user_query, sp["parametros"], filtro_fijo_key)
+                for param, val in sub_ents.items():
+                    if param not in entidades:
+                        entidades[param] = val
+    st.session_state.debug_info["latencia_entidades_ms"] = int((time.perf_counter() - _t2) * 1000)
+    st.session_state.debug_info.update({
+        "flujo_nombre": use_case_entry["nombre"],
+        "flujo_catalogo": use_case_entry.get("catalogo"),
+        "tipo_ejecucion": tipo_pregunta,
+        "entidades": entidades,
+    })
+
+    # Validar filtros requeridos
+    filtros_req = pregunta.get("filtros_requeridos", [])
+    if filtros_req and tipo_pregunta != "rag" and not all(p in entidades for p in filtros_req):
+        labels_req = [PARAM_TO_FILTRO[p][1] for p in filtros_req if p in PARAM_TO_FILTRO]
+        st.session_state.messages.append({
+            "role": "assistant",
+            "content": (
+                f"Esta consulta requiere que especifiques: **{' / '.join(labels_req)}**. "
+                "Por favor escribí una nueva consulta incluyendo esa información."
+            ),
+        })
+        st.session_state.pending = None
+        st.rerun()
+        return
+
+    nombre_caso = use_case_entry["nombre"]
+    mensaje_confirmacion = pending["mensaje_confirmacion"]
+
+    logger = st.session_state.session_logger
+    q = logger.nueva_consulta() if logger else None
+
+    if q:
+        d = st.session_state.debug_info
+        q.query_original            = user_query
+        q.query_reescrita           = d.get("query_reescrita", "")
+        q.caso_nombre               = nombre_caso
+        q.caso_catalogo             = use_case_entry.get("catalogo")
+        q.caso_exitoso              = True
+        q.confirmacion_mensaje      = mensaje_confirmacion
+        q.confirmado                = True
+        q.tipo_ejecucion            = tipo_pregunta
+        q.latencia_deteccion_ms     = d.get("latencia_deteccion_ms")
+        q.latencia_entidades_ms     = d.get("latencia_entidades_ms")
+        q.entidades                 = [
+            {"param": p, "label": v[2], "valor": v[0], "score": v[1]}
+            for p, v in entidades.items()
+        ]
+
+    st.session_state.debug_info["estado"] = "⚙️ Ejecutando..."
+    tipo_label = {"sql": "Consultando base de datos...", "rag": "Buscando en documentos...", "multiple": "Ejecutando consultas en paralelo..."}.get(tipo_pregunta, "Procesando...")
+    with st.status(tipo_label, expanded=True) as _status:
+        st.write("Generando respuesta con IA...")
+        respuesta, exec_debug = _ejecutar_pending(
+            {"use_case_entry": use_case_entry, "entidades": entidades, "user_query": user_query},
+            query_log=q,
+        )
+        st.session_state.debug_info.update(exec_debug)
+        _status.update(label="Listo", state="complete", expanded=False)
+
+    if q:
+        logger.cerrar_consulta()
+
+    st.session_state.debug_info["estado"] = "✅ Completado"
+    st.session_state.messages.append({
+        "role": "assistant",
+        "content": f"**{nombre_caso}**\n\n{respuesta}",
+    })
+    st.session_state.pending = None
+    st.rerun()
 
 
 # ── Entry point ────────────────────────────────────────────────────────────────
