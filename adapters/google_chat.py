@@ -26,7 +26,7 @@ from fastapi import APIRouter, HTTPException, Request
 import google.auth.transport.requests
 import google.oauth2.id_token
 
-from core.guided_flow import FlowResult, OMITIR_SENTINEL, step
+from core.guided_flow import FlowResult, step
 from core.conversation_store import conversation_store
 from core.session_store import session_store
 from adapters.chat_render import render_chat, texto_a_html_card
@@ -227,21 +227,20 @@ def _mensaje_espera() -> dict:
 
 def _es_turno_pesado(session_key: str, valor: str) -> bool:
     """
-    True si el turno EJECUTARÁ la consulta pendiente (Gemini Pro + BigQuery / RAG),
-    lo que puede exceder la ventana síncrona de 30 s de Google Chat.
+    True si el turno PUEDE ejecutar la consulta pendiente (Gemini Pro + BigQuery
+    / RAG), lo que excede la ventana síncrona de 30 s de Google Chat.
 
-    Eso ocurre solo en estado CONFIRM cuando el usuario confirma (S) u omite
-    filtros (Enter); reformular (N) y los clics de menú son instantáneos.
-    Espía el estado sin mutarlo. Sirve igual para CARD_CLICKED (valor del botón)
-    que para MESSAGE (el usuario escribe "S").
+    Con el motor de dos agentes la confirmación es en lenguaje libre: no se sabe
+    si el usuario confirma o reformula hasta llamar al Agente 2. Por eso, estando
+    en CONFIRM con un caso ejecutable pendiente, se trata el turno como pesado
+    (lado seguro contra el timeout). Espía el estado sin mutarlo. Sirve igual
+    para CARD_CLICKED (valor del botón) que para MESSAGE (el usuario escribe).
     """
     session = session_store.load(session_key)
     if not session or session.get("state") != "CONFIRM":
         return False
-    v = (valor or "").strip().upper()
-    if v == OMITIR_SENTINEL.upper() or v == "OMITIR":
-        v = ""
-    return v in ("S", "")
+    pendiente = session.get("pendiente") or {}
+    return pendiente.get("use_case_entry") is not None
 
 
 def _agendar_async(space: str, session_key: str,
@@ -314,7 +313,7 @@ async def webhook(request: Request):
             valor = parametros.get("valor", "")
         else:
             valor = next((p.get("value", "") for p in parametros if p.get("key") == "valor"), "")
-        echo = "Selección: Omitir filtros (Enter)" if valor == OMITIR_SENTINEL else f"Selección: {valor}"
+        echo = f"Selección: {valor}"
         # Turno pesado (confirmar ejecución): procesar en background y publicar
         # async via Chat REST API, para no chocar con el límite de 30 s del webhook.
         if _es_turno_pesado(session_key, valor):

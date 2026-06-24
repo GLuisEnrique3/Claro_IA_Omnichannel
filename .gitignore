@@ -24,19 +24,18 @@ data/~$*
 # Notes
 notes/
 
+# Words
+
 # OS
 .DS_Store
 Thumbs.db
 desktop.ini
 
 # Claude
-
 .claude/
 
 # Api Experimental
-
 app/
-
 
 # Sesiones y estado runtime de canales (Google Chat)
 data/guided_flow_sessions.json

@@ -87,39 +87,6 @@ def _fmt_sql_debug(b: Bloque) -> str | None:
     return f"```\n{_limpiar(b.texto)}\n```"
 
 
-def _fmt_flujo(b: Bloque) -> str:
-    data = b.data or {}
-    partes = [
-        f"*Flujo identificado:* {data.get('nombre')} _(coincidencia: {data.get('score', 0):.2f})_"
-    ]
-    # Detalle de entidades/consultas paralelas solo en modo debug — el CLI
-    # dejó de mostrarlos al usuario final (commits de main 2026-06).
-    if _debug_activo():
-        multiple = data.get("multiple")
-        if multiple:
-            nombres = multiple.get("invoca_nombres", [])
-            partes.append(f"Se ejecutarán {len(nombres)} consultas en paralelo:")
-            partes += [f"• {n}" for n in nombres]
-            for sub in multiple.get("subcasos", []):
-                partes.append(f"\nEntidades detectadas [{sub['nombre']}]:")
-                if sub["entidades"]:
-                    partes += [
-                        f"• {e['label']}: {e['valor']} _({e['score']:.2f})_"
-                        for e in sub["entidades"]
-                    ]
-                else:
-                    partes.append("_(ninguna)_")
-        elif data.get("entidades"):
-            partes.append("Entidades detectadas:")
-            partes += [
-                f"• {e['label']}: {e['valor']} _({e['score']:.2f})_"
-                for e in data["entidades"]
-            ]
-        else:
-            partes.append("_Sin ninguna entidad detectada._")
-    return "\n".join(partes)
-
-
 def _fmt_filtros_requeridos(b: Bloque) -> str:
     labels = (b.data or {}).get("labels", "")
     return (
@@ -129,15 +96,19 @@ def _fmt_filtros_requeridos(b: Bloque) -> str:
 
 
 def _fmt_confirmar(b: Bloque) -> str:
-    return "¿Desea confirmar?"
+    # El mensaje de confirmación lo redacta el Agente 1 en lenguaje natural;
+    # se muestra tal cual (convertido al formato de Chat).
+    mensaje = (b.data or {}).get("mensaje") or _limpiar(b.texto)
+    return markdown_a_chat(mensaje)
 
 
-def _fmt_retry(b: Bloque) -> str:
-    return "¿Desea intentar de nuevo?"
+def _fmt_meta(b: Bloque) -> str:
+    # Respuesta a una pregunta meta-conversacional sobre el propio asistente.
+    return markdown_a_chat(_limpiar(b.texto))
 
 
 def _fmt_otra(b: Bloque) -> str:
-    return "¿Desea realizar otra consulta?"
+    return "¿Hay algo más en lo que pueda ayudarte?"
 
 
 def _fmt_resultado(b: Bloque) -> str:
@@ -266,10 +237,9 @@ _FORMATTERS = {
     "salto": _fmt_omitir,
     "debug": _fmt_debug,
     "sql_debug": _fmt_sql_debug,
-    "flujo": _fmt_flujo,
     "filtros_requeridos": _fmt_filtros_requeridos,
     "confirmar_prompt": _fmt_confirmar,
-    "retry_prompt": _fmt_retry,
+    "meta": _fmt_meta,
     "otra_prompt": _fmt_otra,
     "resultado": _fmt_resultado,
     "multiple_exec": _fmt_multiple_exec,

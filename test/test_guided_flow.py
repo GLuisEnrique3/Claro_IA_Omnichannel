@@ -2,7 +2,9 @@
 Tests de paridad de core/guided_flow.py contra el flujo del CLI (main.py).
 
 Las funciones pesadas (LLM, BigQuery, embeddings, Chroma) se mockean; lo que
-se verifica es la ORQUESTACIÓN: estados, textos exactos y orden de líneas.
+se verifica es la ORQUESTACIÓN del motor de dos agentes: estados, textos y
+transiciones (Agente 1 = seleccionar_caso_de_uso_llm, Agente 2 =
+_interpretar_confirmacion).
 
 Ejecutar:
     pytest test/test_guided_flow.py -v
@@ -33,23 +35,36 @@ def entorno_aislado(tmp_path, monkeypatch):
 
 
 @pytest.fixture
-def sesion_management(monkeypatch):
-    """Sesión ya identificada como Management (tipo 3), lista para consultar."""
+def sesion_lista(monkeypatch):
+    """Sesión ya identificada como Representante de Agencia, lista para consultar."""
     key = "gchat::spaces/TEST::users/1"
+    monkeypatch.setitem(cli.FILTROS_VALIDOS, "agency", ["Comfort Insurance"])
+    monkeypatch.setattr(cli, "_buscar_semantico", lambda *a, **k: ("Comfort Insurance", 0.90))
     guided_flow.iniciar_sesion(key)
-    resultado = guided_flow.step(key, "3")
-    assert "✅ Bienvenido, Management" in resultado.texto
+    guided_flow.step(key, "1")
+    resultado = guided_flow.step(key, "comfort")
+    assert "✅ Bienvenido" in resultado.texto
     return key
 
 
-def _mock_pipeline_sql(monkeypatch, pregunta: dict, score: float = 0.91, entidades: dict | None = None):
+def _mock_agente1(monkeypatch, pregunta: dict | None, *, mensaje: str = "Entiendo que quieres X. ¿Es correcto?",
+                  es_meta: bool = False, catalogo: str = "A", entidades: dict | None = None):
+    """Mockea el Agente 1 (clasificación). use_case_entry=None si pregunta es None."""
     monkeypatch.setattr(cli, "reescribir_consulta", lambda hist, q: q)
-    monkeypatch.setattr(cli, "transformar_consulta_con_llm", lambda q: "consulta normalizada")
+    entry = None if pregunta is None else {"nombre": pregunta["texto"], "pregunta": pregunta, "catalogo": catalogo}
     monkeypatch.setattr(
-        cli, "detectar_caso_de_uso",
-        lambda norm, cats: ({"nombre": pregunta["texto"], "pregunta": pregunta, "catalogo": "A"}, score),
+        cli, "seleccionar_caso_de_uso_llm",
+        lambda query, cats: (entry, mensaje, es_meta),
     )
     monkeypatch.setattr(cli, "extraer_entidades", lambda *a, **k: entidades or {})
+
+
+def _mock_agente2(monkeypatch, *, confirmado: bool, query_ajustada: str | None = None):
+    """Mockea el Agente 2 (interpretación de la confirmación libre)."""
+    monkeypatch.setattr(
+        cli, "_interpretar_confirmacion",
+        lambda mensaje, respuesta: {"confirmado": confirmado, "query_ajustada": query_ajustada},
+    )
 
 
 PREGUNTA_SQL = {
@@ -57,7 +72,6 @@ PREGUNTA_SQL = {
     "texto": "Contratos Activos",
     "tipo": "sql",
     "parametros": ["o.Carrier"],
-    "sql_by_role": {"3": "SELECT 1 {dynamic_filters}"},
 }
 
 
@@ -70,10 +84,10 @@ class TestIdentificacion:
         assert "🔐 IDENTIFICACIÓN DE USUARIO" in resultado.texto
         assert "Seleccione su tipo de usuario:" in resultado.texto
         assert "  1. Representante de Agencia" in resultado.texto
+        # Rol Management (tipo 3) eliminado: solo dos tipos de usuario.
         assert resultado.botones == [
             ("1. Representante de Agencia", "1"),
             ("2. Agente NPN", "2"),
-            ("3. Management", "3"),
         ]
 
     def test_opcion_invalida_repite_menu(self):
@@ -82,13 +96,6 @@ class TestIdentificacion:
         resultado = guided_flow.step(key, "9")
         assert resultado.lineas[0] == "⚠  Opción no válida. Intente nuevamente."
         assert "Seleccione su tipo de usuario:" in resultado.texto
-
-    def test_tipo_3_da_bienvenida_y_menu_de_consulta(self):
-        key = "gchat::s::u"
-        guided_flow.iniciar_sesion(key)
-        resultado = guided_flow.step(key, "3")
-        assert resultado.lineas[:2] == ["", "✅ Bienvenido, Management"]
-        assert resultado.lineas[2:] == [SEP, "", "¿Qué desea consultar hoy?", "", "  Su consulta: "]
 
     def test_tipo_1_pide_agencia_y_valida_semanticamente(self, monkeypatch):
         key = "gchat::s::u"
@@ -117,128 +124,88 @@ class TestIdentificacion:
         assert resultado.lineas[-1] == "Ingrese el nombre de su agencia: "
 
 
-# ── Pipeline de consulta ───────────────────────────────────────────────────────
+# ── Pipeline de consulta (Agente 1) ─────────────────────────────────────────────
 
 class TestPipelineConsulta:
-    def test_flujo_detectado_pide_confirmacion(self, sesion_management, monkeypatch):
-        _mock_pipeline_sql(monkeypatch, PREGUNTA_SQL)
-        resultado = guided_flow.step(sesion_management, "cuantos contratos activos")
+    def test_caso_detectado_pide_confirmacion(self, sesion_lista, monkeypatch):
+        _mock_agente1(monkeypatch, PREGUNTA_SQL, mensaje="Entiendo que quieres consultar Contratos Activos. ¿Es correcto?")
+        resultado = guided_flow.step(sesion_lista, "cuantos contratos activos")
 
         assert "  Analizando su consulta..." in resultado.lineas
-        assert "  #--DEBUG Pregunta Formateada: consulta normalizada" in resultado.lineas
-        assert "  Tu pregunta se ha identificado mediante el flujo: Contratos Activos con un nivel de coincidencia del 0.91%." in resultado.lineas
-        assert resultado.lineas[-1].startswith("  ¿Desea Confirmar?")
-        assert resultado.botones == guided_flow._BOTONES_CONFIRMAR
-
-    def test_entidades_detectadas_van_solo_en_data(self, sesion_management, monkeypatch):
-        entidades = {"o.Carrier": ("Humana", 0.93, "Carrier", "AND o.Carrier = 'Humana'")}
-        _mock_pipeline_sql(monkeypatch, PREGUNTA_SQL, entidades=entidades)
-        resultado = guided_flow.step(sesion_management, "contratos activos humana")
-
-        # El CLI ya no muestra entidades al usuario — viajan solo en data del bloque flujo
-        assert "  Con las siguientes entidades:" not in resultado.lineas
-        bloque_flujo = next(b for b in resultado.bloques if b.kind == "flujo")
-        assert bloque_flujo.data["entidades"] == [
-            {"label": "Carrier", "valor": "Humana", "score": 0.93}
-        ]
-
-    def _mock_pipeline_multiple(self, monkeypatch, entidades: dict):
-        """Caso multiple con filtros_requeridos (réplica del caso B/7)."""
-        pregunta = {
-            "id": "7",
-            "texto": "Porque no me han pagado mis comisiones",
-            "tipo": "multiple",
-            "invoca": ["1"],
-            "filtros_requeridos": ["p.Policy_Number__c"],
-        }
-        monkeypatch.setitem(cli.USE_CASES["options"], "B", {
-            "nombre": "Comisiones",
-            "preguntas": [
-                {"id": "1", "texto": "Detalle Comisiones", "tipo": "sql",
-                 "parametros": ["p.Policy_Number__c"]},
-                pregunta,
-            ],
-        })
-        monkeypatch.setattr(cli, "reescribir_consulta", lambda hist, q: q)
-        monkeypatch.setattr(cli, "transformar_consulta_con_llm", lambda q: "consulta normalizada")
-        monkeypatch.setattr(
-            cli, "detectar_caso_de_uso",
-            lambda norm, cats: ({"nombre": pregunta["texto"], "pregunta": pregunta, "catalogo": "B"}, 0.95),
-        )
-        monkeypatch.setattr(cli, "extraer_entidades", lambda *a, **k: entidades)
-
-    def test_multiple_con_filtros_requeridos_y_entidades_confirma(self, sesion_management, monkeypatch):
-        # Regresión: la fusión de entidades por sub-caso debe alimentar el
-        # pre-chequeo de filtros_requeridos — si se pierde, B/7 nunca ejecuta.
-        entidades = {"p.Policy_Number__c": ("12345", 0.9, "Número de Póliza", "AND p.Policy_Number__c = '12345'")}
-        self._mock_pipeline_multiple(monkeypatch, entidades)
-
-        resultado = guided_flow.step(sesion_management, "porque no me han pagado la póliza 12345")
-
-        assert resultado.lineas[-1].startswith("  ¿Desea Confirmar?")
-        session = guided_flow.session_store.load(sesion_management)
+        # El mensaje de confirmación lo redacta el Agente 1 (lenguaje natural).
+        assert any("¿Es correcto?" in l for l in resultado.lineas)
+        assert resultado.botones == guided_flow._BOTON_CONFIRMAR
+        session = guided_flow.session_store.load(sesion_lista)
         assert session["state"] == "CONFIRM"
-        assert "p.Policy_Number__c" in session["pendiente"]["entidades"]
 
-    def test_multiple_con_filtros_requeridos_sin_entidades_pide_reformular(self, sesion_management, monkeypatch):
-        self._mock_pipeline_multiple(monkeypatch, entidades={})
+    def test_pregunta_meta_responde_directo_sin_confirmar(self, sesion_lista, monkeypatch):
+        _mock_agente1(monkeypatch, None, mensaje="Soy el asistente de Claro Insurance.", es_meta=True)
+        resultado = guided_flow.step(sesion_lista, "quién eres")
 
-        resultado = guided_flow.step(sesion_management, "porque no me han pagado mis comisiones")
+        assert "Soy el asistente de Claro Insurance." in resultado.texto
+        assert "¿Qué desea consultar hoy?" in resultado.texto
+        # No hay nada que confirmar: vuelve directo a QUERY.
+        session = guided_flow.session_store.load(sesion_lista)
+        assert session["state"] == "QUERY"
+        assert resultado.botones is None
 
-        assert any("requiere identificar los siguientes filtros" in l for l in resultado.lineas)
-        session = guided_flow.session_store.load(sesion_management)
-        assert session["state"] == "REFORMULAR"
+    def test_caso_no_detectado_queda_en_confirm_para_afinar(self, sesion_lista, monkeypatch):
+        # Agente 1 sin caso (use_case None): muestra el mensaje y espera respuesta
+        # libre que el Agente 2 usará para reclasificar (no hay rama RETRY).
+        _mock_agente1(monkeypatch, None, mensaje="No identifiqué un flujo. ¿Puedes dar más detalle?")
+        resultado = guided_flow.step(sesion_lista, "asdf qwerty")
 
-    def test_flujo_no_detectado_ofrece_reintento(self, sesion_management, monkeypatch):
-        monkeypatch.setattr(cli, "reescribir_consulta", lambda hist, q: q)
-        monkeypatch.setattr(cli, "transformar_consulta_con_llm", lambda q: "nada")
-        monkeypatch.setattr(cli, "detectar_caso_de_uso", lambda norm, cats: (None, 0.3))
+        assert "No identifiqué un flujo" in resultado.texto
+        session = guided_flow.session_store.load(sesion_lista)
+        assert session["state"] == "CONFIRM"
+        # Sin caso ejecutable → sin botón de confirmación rápida.
+        assert resultado.botones is None
 
-        resultado = guided_flow.step(sesion_management, "asdf qwerty")
-        assert "  No fue posible identificar un flujo asociado a su solicitud" in resultado.texto
-        assert resultado.lineas[-1] == "  ¿Desea intentar de nuevo? (S/N): "
-        assert resultado.botones == [("S", "S"), ("N", "N")]
-
-        # N → despedida y fin de sesión
-        resultado = guided_flow.step(sesion_management, "N")
-        assert resultado.terminado
-        assert "Gracias por utilizar el Sistema de Consultas IA. ¡Hasta pronto!" in resultado.texto
-
-    def test_filtros_requeridos_faltantes_pide_reformular(self, sesion_management, monkeypatch):
+    def test_filtros_requeridos_faltantes_pide_reformular(self, sesion_lista, monkeypatch):
         pregunta = dict(PREGUNTA_SQL, filtros_requeridos=["p.Policy_Number__c"], parametros=["p.Policy_Number__c"])
-        _mock_pipeline_sql(monkeypatch, pregunta)
-        resultado = guided_flow.step(sesion_management, "detalle de comisiones")
+        _mock_agente1(monkeypatch, pregunta)
+        _mock_agente2(monkeypatch, confirmado=True)
+        guided_flow.step(sesion_lista, "detalle de comisiones")
+        # Confirma → al ejecutar detecta que faltan filtros requeridos
+        resultado = guided_flow.step(sesion_lista, "sí")
 
         assert "  Esta consulta requiere identificar los siguientes filtros/entidades (Número de Póliza)," in resultado.lineas
         assert resultado.lineas[-1] == "  Su consulta: "
-
-        # La siguiente consulta reinicia el pipeline completo
-        entidades = {"p.Policy_Number__c": ("H123", 1.0, "Número de Póliza", "AND p.Policy_Number__c = 'H123'")}
-        _mock_pipeline_sql(monkeypatch, pregunta, entidades=entidades)
-        resultado = guided_flow.step(sesion_management, "detalle de comisiones poliza H123")
-        assert resultado.lineas[-1].startswith("  ¿Desea Confirmar?")
+        session = guided_flow.session_store.load(sesion_lista)
+        assert session["state"] == "REFORMULAR"
 
 
-# ── Confirmación y ejecución ───────────────────────────────────────────────────
+# ── Confirmación y ejecución (Agente 2) ─────────────────────────────────────────
 
 class TestConfirmacion:
     def _hasta_confirmacion(self, key, monkeypatch):
-        _mock_pipeline_sql(monkeypatch, PREGUNTA_SQL)
+        _mock_agente1(monkeypatch, PREGUNTA_SQL)
         resultado = guided_flow.step(key, "cuantos contratos activos")
-        assert resultado.lineas[-1].startswith("  ¿Desea Confirmar?")
+        assert guided_flow.session_store.load(key)["state"] == "CONFIRM"
 
-    def test_confirmar_ejecuta_y_muestra_resultado(self, sesion_management, monkeypatch):
-        self._hasta_confirmacion(sesion_management, monkeypatch)
+    def test_confirmar_ejecuta_y_muestra_resultado(self, sesion_lista, monkeypatch):
+        self._hasta_confirmacion(sesion_lista, monkeypatch)
+        _mock_agente2(monkeypatch, confirmado=True)
         monkeypatch.setattr(cli, "ejecutar_consulta", lambda *a, **k: "Tienes 42 contratos activos.")
 
-        resultado = guided_flow.step(sesion_management, "S")
-        assert resultado.lineas[:2] == ["", "  Procesando su consulta, por favor espere..."]
+        resultado = guided_flow.step(sesion_lista, "sí, correcto")
+        assert "  Procesando su consulta, por favor espere..." in resultado.lineas
         assert "RESULTADO:" in resultado.lineas
         assert "Tienes 42 contratos activos." in resultado.lineas
-        assert resultado.lineas[-1] == "¿Desea realizar otra consulta? (S/N): "
+        assert resultado.lineas[-1] == guided_flow._PROMPT_OTRA
 
-    def test_prints_internos_se_capturan(self, sesion_management, monkeypatch):
-        self._hasta_confirmacion(sesion_management, monkeypatch)
+    def test_boton_confirmar_ejecuta(self, sesion_lista, monkeypatch):
+        self._hasta_confirmacion(sesion_lista, monkeypatch)
+        _mock_agente2(monkeypatch, confirmado=True)
+        monkeypatch.setattr(cli, "ejecutar_consulta", lambda *a, **k: "ok")
+        # El botón rápido envía el sentinel afirmativo.
+        resultado = guided_flow.step(sesion_lista, guided_flow.CONFIRMAR_SENTINEL)
+        assert "ok" in resultado.texto
+        assert guided_flow.session_store.load(sesion_lista)["state"] == "OTRA"
+
+    def test_prints_internos_se_capturan(self, sesion_lista, monkeypatch):
+        self._hasta_confirmacion(sesion_lista, monkeypatch)
+        _mock_agente2(monkeypatch, confirmado=True)
 
         def ejecutar_con_prints(*a, **k):
             print()
@@ -246,113 +213,122 @@ class TestConfirmacion:
             return "Respuesta final."
 
         monkeypatch.setattr(cli, "ejecutar_consulta", ejecutar_con_prints)
-        resultado = guided_flow.step(sesion_management, "S")
+        resultado = guided_flow.step(sesion_lista, "sí")
         assert "🤖 Consultando el sistema.." in resultado.texto
         assert "Respuesta final." in resultado.texto
 
-    def test_omitir_ejecuta_sin_entidades(self, sesion_management, monkeypatch):
-        self._hasta_confirmacion(sesion_management, monkeypatch)
-        llamadas = {}
+    def test_no_confirmado_reclasifica_con_query_ajustada(self, sesion_lista, monkeypatch):
+        self._hasta_confirmacion(sesion_lista, monkeypatch)
+        # El Agente 2 no confirma pero extrae una corrección → Agente 1 reclasifica.
+        _mock_agente2(monkeypatch, confirmado=False, query_ajustada="contratos inactivos")
+        recibido = {}
 
-        def ejecutar(pregunta, filtro, entidades, texto_usuario, **kw):
-            llamadas["entidades"] = entidades
-            llamadas["texto_usuario"] = texto_usuario
-            return "ok"
+        def agente1(query, cats):
+            recibido["query"] = query
+            return ({"nombre": "Contratos Inactivos", "pregunta": PREGUNTA_SQL, "catalogo": "A"},
+                    "Entiendo: Contratos Inactivos. ¿Es correcto?", False)
 
-        monkeypatch.setattr(cli, "ejecutar_consulta", ejecutar)
-        resultado = guided_flow.step(sesion_management, guided_flow.OMITIR_SENTINEL)
-        assert llamadas == {"entidades": {}, "texto_usuario": ""}
-        assert not resultado.terminado
+        monkeypatch.setattr(cli, "seleccionar_caso_de_uso_llm", agente1)
+        resultado = guided_flow.step(sesion_lista, "no, los inactivos")
 
-    def test_n_vuelve_al_menu(self, sesion_management, monkeypatch):
-        self._hasta_confirmacion(sesion_management, monkeypatch)
-        resultado = guided_flow.step(sesion_management, "N")
-        assert "  Volviendo al menú principal..." in resultado.lineas
-        assert "¿Qué desea consultar hoy?" in resultado.lineas
+        assert recibido["query"] == "contratos inactivos"
+        assert "Contratos Inactivos" in resultado.texto
+        # Sigue en CONFIRM (loop de afinamiento, sin límite de reintentos).
+        assert guided_flow.session_store.load(sesion_lista)["state"] == "CONFIRM"
 
-    def test_opcion_invalida_repregunta(self, sesion_management, monkeypatch):
-        self._hasta_confirmacion(sesion_management, monkeypatch)
-        resultado = guided_flow.step(sesion_management, "tal vez")
-        assert resultado.lineas[0] == "  ⚠  Opción no válida. Por favor ingrese: S / N / Enter."
-        assert resultado.botones == guided_flow._BOTONES_CONFIRMAR
+    def test_respuesta_vacia_repite_propuesta(self, sesion_lista, monkeypatch):
+        self._hasta_confirmacion(sesion_lista, monkeypatch)
+        resultado = guided_flow.step(sesion_lista, "")
+        assert any("¿Es correcto?" in l or "Entiendo" in l for l in resultado.lineas)
+        assert guided_flow.session_store.load(sesion_lista)["state"] == "CONFIRM"
 
-    def test_otra_consulta_s_vuelve_al_menu_n_despide(self, sesion_management, monkeypatch):
-        self._hasta_confirmacion(sesion_management, monkeypatch)
+    def test_otra_consulta_texto_libre_encadena_como_nueva(self, sesion_lista, monkeypatch):
+        self._hasta_confirmacion(sesion_lista, monkeypatch)
+        _mock_agente2(monkeypatch, confirmado=True)
         monkeypatch.setattr(cli, "ejecutar_consulta", lambda *a, **k: "ok")
-        guided_flow.step(sesion_management, "S")
+        guided_flow.step(sesion_lista, "sí")  # ejecuta → OTRA
+        assert guided_flow.session_store.load(sesion_lista)["state"] == "OTRA"
 
-        resultado = guided_flow.step(sesion_management, "S")
-        assert "¿Qué desea consultar hoy?" in resultado.lineas
+        # Escribir otra consulta desde OTRA encadena directo como nueva consulta.
+        guided_flow.step(sesion_lista, "y los inactivos")
+        assert guided_flow.session_store.load(sesion_lista)["state"] == "CONFIRM"
 
-        self._hasta_confirmacion(sesion_management, monkeypatch)
+    def test_otra_consulta_no_despide(self, sesion_lista, monkeypatch):
+        self._hasta_confirmacion(sesion_lista, monkeypatch)
+        _mock_agente2(monkeypatch, confirmado=True)
         monkeypatch.setattr(cli, "ejecutar_consulta", lambda *a, **k: "ok")
-        guided_flow.step(sesion_management, "S")
-        resultado = guided_flow.step(sesion_management, "N")
+        guided_flow.step(sesion_lista, "sí")  # ejecuta → OTRA
+
+        # Una respuesta en _PALABRAS_NO termina la sesión.
+        resultado = guided_flow.step(sesion_lista, "no, gracias")
         assert resultado.terminado
+        assert "¡Hasta pronto!" in resultado.texto
 
 
 # ── Keywords globales ──────────────────────────────────────────────────────────
 
 class TestKeywordsGlobales:
-    def test_salir_finaliza_sesion(self, sesion_management):
-        resultado = guided_flow.step(sesion_management, "salir")
+    def test_salir_finaliza_sesion(self, sesion_lista):
+        resultado = guided_flow.step(sesion_lista, "salir")
         assert resultado.terminado
         assert resultado.lineas == ["", "Sesión finalizada. ¡Hasta pronto!"]
-        # El siguiente mensaje arranca una sesión nueva
-        resultado = guided_flow.step(sesion_management, "lo que sea")
+        resultado = guided_flow.step(sesion_lista, "lo que sea")
         assert "🔐 IDENTIFICACIÓN DE USUARIO" in resultado.texto
 
-    def test_nueva_sesion_reinicia_identificacion(self, sesion_management):
-        resultado = guided_flow.step(sesion_management, "nueva sesión")
+    def test_nueva_sesion_reinicia_identificacion(self, sesion_lista):
+        resultado = guided_flow.step(sesion_lista, "nueva sesión")
         assert "  Volviendo a la identificación de usuario..." in resultado.lineas
         assert "Seleccione su tipo de usuario:" in resultado.texto
 
-    def test_instrucciones_muestra_pantalla_y_repregunta(self, sesion_management):
-        resultado = guided_flow.step(sesion_management, "instrucciones")
+    def test_instrucciones_muestra_pantalla_y_repregunta(self, sesion_lista):
+        resultado = guided_flow.step(sesion_lista, "instrucciones")
         assert "INSTRUCCIONES DE USO" in resultado.texto
-        assert "FLUJO GENERAL DEL SISTEMA" in resultado.texto
         assert resultado.lineas[-1] == "  Su consulta: "
 
-    def test_saludo_responde_y_repregunta(self, sesion_management):
-        resultado = guided_flow.step(sesion_management, "hola")
+    def test_saludo_responde_y_repregunta(self, sesion_lista):
+        resultado = guided_flow.step(sesion_lista, "hola")
         assert "  ¡Hola! Soy tu asistente de Claro Insurance." in resultado.lineas
         assert resultado.lineas[-1] == "  Su consulta: "
 
-    def test_escalar_en_proceso(self, sesion_management):
-        resultado = guided_flow.step(sesion_management, "escalar")
+    def test_escalar_en_proceso(self, sesion_lista):
+        resultado = guided_flow.step(sesion_lista, "escalar")
         assert "  Funcionalidad todavía en proceso." in resultado.lineas
 
 
 # ── Historial (sliding window) ─────────────────────────────────────────────────
 
 class TestHistorial:
-    def test_historial_reciente_mantiene_ventana_de_10(self, sesion_management, monkeypatch):
-        _mock_pipeline_sql(monkeypatch, PREGUNTA_SQL)
-        monkeypatch.setattr(cli, "ejecutar_consulta", lambda *a, **k: "ok")
+    def test_historial_guarda_pregunta_y_respuesta(self, sesion_lista, monkeypatch):
+        _mock_agente1(monkeypatch, PREGUNTA_SQL)
+        _mock_agente2(monkeypatch, confirmado=True)
+        monkeypatch.setattr(cli, "ejecutar_consulta", lambda *a, **k: "respuesta-asistente")
 
-        for i in range(12):
-            guided_flow.step(sesion_management, f"consulta numero {i}")
-            guided_flow.step(sesion_management, "S")   # confirmar
-            guided_flow.step(sesion_management, "S")   # otra consulta
+        guided_flow.step(sesion_lista, "contratos activos")
+        guided_flow.step(sesion_lista, "sí")
 
-        sesion = session_store_mod.session_store.load(sesion_management)
-        assert len(sesion["historial_reciente"]) == 10
-        assert sesion["historial_reciente"][-1] == "consulta numero 11"
+        sesion = session_store_mod.session_store.load(sesion_lista)
+        roles = [h["role"] for h in sesion["historial_reciente"]]
+        assert roles == ["user", "assistant"]
+        assert sesion["historial_reciente"][-1]["content"] == "respuesta-asistente"
 
-    def test_rewriter_recibe_solo_ultimo_turno(self, sesion_management, monkeypatch):
+    def test_rewriter_recibe_ultimas_dos_entradas(self, sesion_lista, monkeypatch):
         recibido = {}
 
         def rewriter(historial, query):
-            recibido["historial"] = historial
+            recibido["historial"] = list(historial)
             return query
 
-        _mock_pipeline_sql(monkeypatch, PREGUNTA_SQL)
+        _mock_agente1(monkeypatch, PREGUNTA_SQL)
+        _mock_agente2(monkeypatch, confirmado=True)
         monkeypatch.setattr(cli, "reescribir_consulta", rewriter)
         monkeypatch.setattr(cli, "ejecutar_consulta", lambda *a, **k: "ok")
 
-        guided_flow.step(sesion_management, "contratos activos")
-        guided_flow.step(sesion_management, "S")
-        guided_flow.step(sesion_management, "S")
-        guided_flow.step(sesion_management, "y los inactivos")
+        guided_flow.step(sesion_lista, "contratos activos")
+        guided_flow.step(sesion_lista, "sí")
+        guided_flow.step(sesion_lista, "y los inactivos")
 
-        assert recibido["historial"] == [{"role": "user", "content": "contratos activos"}]
+        # Tras el primer turno hay (user, assistant); el rewriter recibe esas dos.
+        assert recibido["historial"] == [
+            {"role": "user", "content": "contratos activos"},
+            {"role": "assistant", "content": "ok"},
+        ]

@@ -79,7 +79,7 @@ class TestLimpieza:
         assert "━" not in texto
 
     def test_ident_menu_usa_data(self):
-        bloque = Bloque("ident_menu", "raw cli", data={"tipos": [("1", "Representante de Agencia"), ("3", "Management")]})
+        bloque = Bloque("ident_menu", "raw cli", data={"tipos": [("1", "Representante de Agencia"), ("2", "Agente NPN")]})
         texto = _render(bloque)
         assert "*🔐 Identificación de usuario*" in texto
         assert "1. Representante de Agencia" in texto
@@ -90,47 +90,42 @@ class TestLimpieza:
         assert texto == "Volviendo al menú principal..."
 
 
-# ── Flujo identificado y resultado ─────────────────────────────────────────────
+# ── Confirmación, meta y resultado ──────────────────────────────────────────────
 
 class TestFlujo:
-    def test_flujo_oculta_entidades_sin_debug(self):
-        bloque = Bloque("flujo", "raw", data={
-            "nombre": "Cantidad de Contratos Activos", "score": 0.95,
-            "entidades": [{"label": "Carrier", "valor": "Ambetter", "score": 1.0}],
-            "multiple": None,
-        })
-        texto = _render(bloque)
-        assert "*Flujo identificado:* Cantidad de Contratos Activos _(coincidencia: 0.95)_" in texto
-        # Detalle de entidades solo visible con FLOW_DEBUG=1 (paridad con el CLI)
-        assert "Carrier" not in texto.replace("Cantidad de Contratos Activos", "")
-
-    def test_flujo_muestra_entidades_en_debug(self, monkeypatch):
-        monkeypatch.setenv("FLOW_DEBUG", "1")
-        bloque = Bloque("flujo", "raw", data={
-            "nombre": "Cantidad de Contratos Activos", "score": 0.95,
-            "entidades": [{"label": "Carrier", "valor": "Ambetter", "score": 1.0}],
-            "multiple": None,
-        })
-        texto = _render(bloque)
-        assert "• Carrier: Ambetter _(1.00)_" in texto
-
-    def test_flujo_sin_entidades_en_debug(self, monkeypatch):
-        monkeypatch.setenv("FLOW_DEBUG", "1")
-        bloque = Bloque("flujo", "raw", data={"nombre": "X", "score": 0.9, "entidades": [], "multiple": None})
-        assert "_Sin ninguna entidad detectada._" in _render(bloque)
-
     def test_resultado_formateado(self):
         bloque = Bloque("resultado", "\nRESULTADO:\n" + SEP + "\nHay 42 contratos.", data={"respuesta": "Hay 42 contratos."})
         texto = _render(bloque)
         assert texto == "*Resultado*\nHay 42 contratos."
 
-    def test_prompts_de_confirmacion_naturalizados(self):
-        texto = _render(
-            Bloque("confirmar_prompt", "  ¿Desea Confirmar? (S = confirmar / ...): "),
-            Bloque("otra_prompt", "¿Desea realizar otra consulta? (S/N): "),
+    def test_confirmacion_muestra_mensaje_del_agente(self):
+        # El mensaje de confirmación (Agente 1) se muestra tal cual, sin S/N.
+        bloque = Bloque(
+            "confirmar_prompt",
+            "\n  Entiendo que quieres consultar Contratos Activos. ¿Es correcto?\n\n  Su respuesta: ",
+            data={"mensaje": "Entiendo que quieres consultar Contratos Activos. ¿Es correcto?", "tiene_caso": True},
         )
-        assert "¿Desea confirmar?" in texto
-        assert "¿Desea realizar otra consulta?" in texto
+        texto = _render(bloque)
+        assert "Entiendo que quieres consultar Contratos Activos. ¿Es correcto?" in texto
+        assert "(S/N)" not in texto
+        assert "Su respuesta:" not in texto
+
+    def test_confirmacion_convierte_markdown(self):
+        bloque = Bloque(
+            "confirmar_prompt", "raw",
+            data={"mensaje": "Quieres ver los **contratos activos**. ¿Correcto?", "tiene_caso": True},
+        )
+        texto = _render(bloque)
+        assert "*contratos activos*" in texto  # **negrita** → *negrita* (formato Chat)
+
+    def test_meta_responde_directo(self):
+        bloque = Bloque("meta", "\n  Soy el asistente de **Claro Insurance**.")
+        texto = _render(bloque)
+        assert "Soy el asistente de *Claro Insurance*." in texto
+
+    def test_otra_naturalizada(self):
+        texto = _render(Bloque("otra_prompt", "¿Hay algo más en lo que pueda ayudarte? "))
+        assert "¿Hay algo más en lo que pueda ayudarte?" in texto
         assert "(S/N)" not in texto
 
 
@@ -148,20 +143,18 @@ class TestInstrucciones:
             assert char not in render_instrucciones, f"queda decoración: {char}"
 
     def test_titulos_en_negrita(self, render_instrucciones):
+        # La pantalla se recortó (function-calling, CHANGELOG punto 7): ya no hay
+        # tabla de filtros ni lista de consultas de ejemplo; ahora hay "TEMAS QUE
+        # PUEDE CONSULTAR" resuelto dinámicamente por el Agente 1.
         assert "*INSTRUCCIONES DE USO*" in render_instrucciones
         assert "*FLUJO GENERAL DEL SISTEMA*" in render_instrucciones
-        assert "*FILTROS QUE RECONOCE EL SISTEMA*" in render_instrucciones
+        assert "*TEMAS QUE PUEDE CONSULTAR*" in render_instrucciones
         assert "*CONTRATOS*" in render_instrucciones
         assert "*PAGOS Y COMISIONES*" in render_instrucciones
 
-    def test_tabla_de_filtros_como_vinetas(self, render_instrucciones):
-        assert '• *Carrier*: "con Ambetter", "de Humana"  /  "solo Aetna"' in render_instrucciones
-        assert '• *NPN*: "del NPN 1234567", "agente NPN 9876543"' in render_instrucciones
-
-    def test_marcador_obligatorio_fuera_de_la_negrita(self, render_instrucciones):
-        # Un * dentro de *...* rompe el parseo de negrita en Chat y en cards
-        assert '• *Número de Póliza* (*): ' in render_instrucciones
-        assert '• *ID de Oportunidad* (*): ' in render_instrucciones
+    def test_temas_como_vinetas(self, render_instrucciones):
+        assert "Comisiones Pagadas" in render_instrucciones
+        assert "Licencias" in render_instrucciones
 
     def test_contenido_se_conserva(self, render_instrucciones):
         assert "1. IDENTIFICACIÓN" in render_instrucciones

@@ -2,9 +2,7 @@ import os
 import sys
 from dotenv import load_dotenv
 
-# =========================================================
 # CONFIG
-# =========================================================
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, BASE_DIR)
@@ -14,18 +12,14 @@ from config.chroma_client import ChromaClient
 #COLLECTION_NAME = "instructivos_contratos_supplementary"
 
 COLLECTIONS_TO_DELETE = [
-    "bonus_compensation",
+    "instructivos_aca",
 ]
 
-# =========================================================
 # CONNECT
-# =========================================================
 
 client = ChromaClient(path=os.getenv("CHROMA_PATH", "./chroma_db"))
 
-# =========================================================
 # DELETE COLLECTION
-# =========================================================
 
 """
 collections = [c.name for c in client.list_collections()]

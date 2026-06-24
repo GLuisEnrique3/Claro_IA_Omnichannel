@@ -130,6 +130,14 @@ def cargar_filtros_desde_bq():
     """
     filtros["license_source"] = [row.Source__c for row in client.query(query_license_source).result()]
 
+    # Contract Status
+    query_contract_status = """
+        SELECT DISTINCT Status__c
+        FROM `claroinsurance-dataplatform.salesforce_raw.New_Contracts__c`
+        WHERE Status__c IS NOT NULL
+    """
+    filtros["contract_status"] = [row.Status__c for row in client.query(query_contract_status).result()]
+
     # Payment Status
     query_payment_status = """
         SELECT DISTINCT Payment_Status__c
@@ -154,6 +162,7 @@ def cargar_filtros_desde_bq():
           f"{len(filtros['npn'])} NPNs, {len(filtros['state'])} estados, "
           f"{len(filtros['stage_name'])} stage names, {len(filtros['sub_stage_name'])} sub stages, "
           f"{len(filtros['account_executives'])} account executives, "
+          f"{len(filtros['contract_status'])} contract statuses, "
           f"{len(filtros['payment_status'])} payment statuses, {len(filtros['payment_type'])} payment types")
 
     # ── Embeddings pre-computados por filtro ──────────────────────────────────

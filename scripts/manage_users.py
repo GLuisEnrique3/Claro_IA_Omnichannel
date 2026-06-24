@@ -1,11 +1,3 @@
-"""
-Gestión de usuarios para app_streamlit.py.
-
-Uso:
-    python scripts/manage_users.py add <usuario> <contraseña>
-    python scripts/manage_users.py remove <usuario>
-    python scripts/manage_users.py list
-"""
 import sys
 import json
 import hashlib

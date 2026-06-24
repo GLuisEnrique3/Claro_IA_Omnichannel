@@ -2,9 +2,19 @@
 GuidedFlow — máquina de estados que replica el flujo guiado del CLI (main.py)
 para canales conversacionales request/response (Google Chat).
 
-main.py NO se modifica: este módulo importa sus funciones (detección de caso
-de uso, extracción de entidades, ejecución SQL/RAG/multiple, etc.) y replica
-únicamente la orquestación basada en input()/print() como máquina de estados.
+main.py NO se modifica: este módulo importa sus funciones (clasificación de
+caso de uso, interpretación de confirmación, extracción de entidades, ejecución
+SQL/RAG/multiple, etc.) y replica únicamente la orquestación basada en
+input()/print() como máquina de estados.
+
+Motor de intención (alineado con el rediseño de `feat/function-calling`):
+  - Agente 1 (`seleccionar_caso_de_uso_llm`): clasifica la consulta contra los
+    casos de uso permitidos usando su descripción `usa_esto_cuando`, detecta
+    preguntas meta-conversacionales y redacta el mensaje de confirmación.
+  - Agente 2 (`_interpretar_confirmacion`): interpreta la respuesta libre del
+    usuario (confirmó / corrigió con una aclaración / rechazó). Si no confirma,
+    genera una `query_ajustada` y se vuelve a clasificar. No hay límite de
+    reintentos: el usuario sale del loop confirmando o con un comando global.
 
 Cada paso retorna un FlowResult compuesto de Bloques semánticos:
   - `texto` (CLI): copia EXACTA de lo que imprime el CLI — paridad verificable.
@@ -15,17 +25,17 @@ La salida de las funciones de main.py que imprimen directamente
 _header) se captura tal cual via core/captura_stdout.py.
 
 Estados:
-    IDENT_TIPO   → espera opción 1/2/3 (tipo de usuario)
+    IDENT_TIPO   → espera opción de tipo de usuario (1/2)
     IDENT_VALOR  → espera nombre de agencia / NPN
     QUERY        → espera consulta en lenguaje natural
+    CONFIRM      → espera respuesta libre de confirmación (Agente 2)
     REFORMULAR   → espera consulta reformulada (faltan filtros requeridos)
-    CONFIRM      → espera S / N / Enter(omitir) para ejecutar
-    RETRY        → espera S/N (¿Desea intentar de nuevo?)
-    OTRA         → espera S/N (¿Desea realizar otra consulta?)
+    OTRA         → espera respuesta libre a "¿Hay algo más...?"
 
 Divergencias deliberadas (mínimas) respecto al CLI:
-    - "Enter" no existe en chat: el botón "Omitir filtros" envía el sentinel
-      __OMITIR__ y también se acepta la palabra "omitir" escrita.
+    - En CONFIRM se ofrece un botón rápido "✅ Sí, es correcto" además del
+      texto libre; el botón envía un texto afirmativo que el Agente 2
+      interpreta como confirmación.
     - "volver" fuera de la zona de confirmación crashea el CLI (VoverError no
       capturado); en chat se mapea al comportamiento amigable más cercano.
 """
@@ -44,12 +54,13 @@ instalar_proxy()
 
 _SEP = "━" * 55
 
-# Sentinel del botón "Omitir filtros" (equivalente a Enter vacío en el CLI)
-OMITIR_SENTINEL = "__OMITIR__"
+# Texto que envía el botón rápido de confirmación. El Agente 2 lo interpreta
+# como confirmación afirmativa; el usuario también puede escribir libremente.
+CONFIRMAR_SENTINEL = "Sí, es correcto"
 
-# Ventana del historial usado por reescribir_consulta. El CLI conserva 4
-# entradas pero solo consume la última ([-1:]); aquí se conservan 10 turnos
-# según el ticket — el comportamiento del rewriter es idéntico.
+# Ventana del historial conversacional. El rewriter del CLI consume las dos
+# últimas entradas (pregunta + respuesta real); aquí se conservan más turnos
+# por canal, pero al rewriter solo se le pasan las dos últimas.
 _MAX_HISTORIAL = 10
 
 # SessionLogger por sesión de chat (en memoria — se recrea tras un reinicio)
@@ -123,16 +134,22 @@ def _bloque_menu_consulta() -> Bloque:
     )
 
 
-_PROMPT_CONFIRMAR = "  ¿Desea Confirmar? (S = confirmar / N = reformular filtros / Enter = omitir filtros): "
-_PROMPT_RETRY = "  ¿Desea intentar de nuevo? (S/N): "
-_PROMPT_OTRA = "¿Desea realizar otra consulta? (S/N): "
+_PROMPT_OTRA = "¿Hay algo más en lo que pueda ayudarte? "
 
-_BOTONES_SN = [("S", "S"), ("N", "N")]
-_BOTONES_CONFIRMAR = [
-    ("✅ Confirmar (S)", "S"),
-    ("✏️ Reformular filtros (N)", "N"),
-    ("⏭ Omitir filtros (Enter)", OMITIR_SENTINEL),
-]
+_BOTON_CONFIRMAR = [("✅ Sí, es correcto", CONFIRMAR_SENTINEL)]
+
+
+def _bloque_confirmacion(mensaje: str, use_case_entry: dict | None) -> Bloque:
+    """
+    Bloque con el mensaje de confirmación que redactó el Agente 1. `data`
+    indica si hay un caso de uso propuesto (para que el canal decida si mostrar
+    el botón de confirmación rápida).
+    """
+    return Bloque(
+        "confirmar_prompt",
+        "\n  " + mensaje + "\n\n  Su respuesta: ",
+        data={"mensaje": mensaje, "tiene_caso": use_case_entry is not None},
+    )
 
 
 def _prompt_actual(session: dict) -> tuple[list[Bloque], list[tuple[str, str]] | None]:
@@ -146,11 +163,13 @@ def _prompt_actual(session: dict) -> tuple[list[Bloque], list[tuple[str, str]] |
     if estado in ("QUERY", "REFORMULAR"):
         return [Bloque("prompt_consulta", "  Su consulta: ")], None
     if estado == "CONFIRM":
-        return [Bloque("confirmar_prompt", _PROMPT_CONFIRMAR)], _BOTONES_CONFIRMAR
-    if estado == "RETRY":
-        return [Bloque("retry_prompt", _PROMPT_RETRY)], _BOTONES_SN
+        pendiente = session.get("pendiente") or {}
+        mensaje = pendiente.get("mensaje", "")
+        tiene_caso = pendiente.get("use_case_entry") is not None
+        botones = _BOTON_CONFIRMAR if tiene_caso else None
+        return [_bloque_confirmacion(mensaje, pendiente.get("use_case_entry"))], botones
     if estado == "OTRA":
-        return [Bloque("otra_prompt", _PROMPT_OTRA)], _BOTONES_SN
+        return [Bloque("otra_prompt", _PROMPT_OTRA)], None
     return [], None
 
 
@@ -173,6 +192,19 @@ def _entidades_data(entidades: dict) -> list[dict]:
         {"label": v[2], "valor": v[0], "score": v[1]}
         for v in entidades.values()
     ]
+
+
+def _historial_dicts(session: dict) -> list[dict]:
+    """Historial conversacional como lista de {role, content} (user + assistant)."""
+    return list(session.get("historial_reciente", []))
+
+
+def _registrar_turno(session: dict, user_query: str, respuesta: str) -> None:
+    """Añade el intercambio (pregunta + respuesta real) al historial conversacional."""
+    historial = _historial_dicts(session)
+    historial.append({"role": "user", "content": user_query})
+    historial.append({"role": "assistant", "content": (respuesta or "")[:300]})
+    session["historial_reciente"] = historial[-_MAX_HISTORIAL:]
 
 
 # ── Parsers de salida capturada (para data estructurada) ──────────────────────
@@ -330,8 +362,6 @@ def _procesar(session_key: str, session: dict, texto: str) -> FlowResult:
         return _handle_reformular(session_key, session, texto)
     if estado == "CONFIRM":
         return _handle_confirm(session_key, session, texto)
-    if estado == "RETRY":
-        return _handle_retry(session_key, session, texto)
     if estado == "OTRA":
         return _handle_otra(session_key, session, texto)
 
@@ -527,91 +557,163 @@ def _handle_reformular(session_key: str, session: dict, texto: str) -> FlowResul
 
 
 def _pipeline_consulta(session_key: str, session: dict, user_query: str) -> FlowResult:
-    """Réplica exacta de una iteración de ciclo_consultas hasta la confirmación."""
+    """
+    Réplica de una iteración de ciclo_consultas: reescribe la consulta y la
+    clasifica con el Agente 1, dejando la sesión en CONFIRM (o respondiendo
+    directo si es una pregunta meta-conversacional).
+    """
     logger = _get_logger(session_key)
     q = logger.nueva_consulta()
     q.query_original = user_query
 
-    catalogos = session["catalogos"]
-    filtro_fijo_key = session["filtro_fijo_key"]
-    historial = [
-        {"role": "user", "content": c} for c in session.get("historial_reciente", [])
-    ]
-
     bloques: list[Bloque] = [Bloque("status", "\n  Analizando su consulta...")]
 
-    # Solo pasa la última entrada al rewriter (ver comentario en ciclo_consultas)
-    if len(user_query.split()) > 4:
-        user_query_efectiva = user_query
-    else:
-        user_query_efectiva = cli.reescribir_consulta(historial[-1:], user_query)
-    if user_query_efectiva != user_query:
-        bloques.append(Bloque("debug", f"  #--DEBUG Consulta reescrita: {user_query_efectiva}"))
+    # El rewriter consume el último intercambio (pregunta + respuesta real). La
+    # Regla 2 del prompt deja la query intacta si es completa por sí sola — no
+    # hay atajo por longitud (alineado con el nuevo ciclo_consultas).
+    historial = _historial_dicts(session)
+    user_query_efectiva = cli.reescribir_consulta(historial[-2:], user_query)
+    q.query_reescrita = user_query_efectiva
+
+    return _proponer_caso(session_key, session, q, user_query_efectiva, user_query_efectiva, bloques)
+
+
+def _proponer_caso(
+    session_key: str,
+    session: dict,
+    q,
+    query_clasificar: str,
+    user_query_efectiva: str,
+    bloques: list[Bloque] | None = None,
+) -> FlowResult:
+    """
+    Agente 1: clasifica `query_clasificar`, fija los campos de tracking y deja
+    la sesión en CONFIRM con el mensaje de confirmación. Si el Agente 1 detecta
+    una pregunta meta-conversacional, responde directo y vuelve a QUERY.
+    """
+    bloques = bloques or []
 
     _t = time.perf_counter()
-    normalized = cli.transformar_consulta_con_llm(user_query_efectiva)
-    q.latencia_normalizacion_ms = int((time.perf_counter() - _t) * 1000)
-    q.query_normalizado = normalized
-
-    bloques.append(Bloque("debug", f"  #--DEBUG Pregunta Formateada: {normalized}"))
-
-    _t = time.perf_counter()
-    use_case_entry, score = cli.detectar_caso_de_uso(normalized, catalogos)
+    use_case_entry, mensaje_confirmacion, es_meta = cli.seleccionar_caso_de_uso_llm(
+        query_clasificar, session["catalogos"]
+    )
     q.latencia_deteccion_ms = int((time.perf_counter() - _t) * 1000)
-    q.caso_score = score
     q.caso_exitoso = use_case_entry is not None
+    q.confirmacion_mensaje = mensaje_confirmacion
 
-    if use_case_entry is None:
-        bloques.append(Bloque(
-            "no_flujo",
-            "\n  No fue posible identificar un flujo asociado a su solicitud. Puede reformular su mensaje para intentar nuevamente el proceso automatizado, o escalar su caso a un agente humano para obtener asistencia personalizada.\n\n  Por favor reformule su consulta con más detalle.",
-        ))
-        q.reiniciar_timer()  # excluir el tiempo de espera del usuario al decidir si reintenta
-        session["state"] = "RETRY"
-        bloques.append(Bloque("retry_prompt", _PROMPT_RETRY))
-        return FlowResult(bloques=bloques, botones=_BOTONES_SN)
+    if use_case_entry is not None:
+        q.caso_nombre = use_case_entry["nombre"]
+        q.caso_catalogo = use_case_entry.get("catalogo")
 
-    nombre_caso = use_case_entry["nombre"]
+    if es_meta:
+        # Pregunta conversacional sobre el propio asistente: el mensaje ya es la
+        # respuesta final, no hay nada que confirmar ni ejecutar. Se registra en
+        # el historial y se vuelve a pedir una consulta (como el `continue` del CLI).
+        _registrar_turno(session, user_query_efectiva, mensaje_confirmacion)
+        _get_logger(session_key).cerrar_consulta()
+        session["state"] = "QUERY"
+        bloques.append(Bloque("meta", "\n  " + mensaje_confirmacion))
+        bloques.append(_bloque_menu_consulta())
+        return FlowResult(bloques=bloques)
+
+    session["state"] = "CONFIRM"
+    session["pendiente"] = {
+        "use_case_entry": use_case_entry,
+        "mensaje": mensaje_confirmacion,
+        "user_query_efectiva": user_query_efectiva,
+        "query_clasificar": query_clasificar,
+        "intentos": q.intentos_confirmacion,
+    }
+    botones = _BOTON_CONFIRMAR if use_case_entry is not None else None
+    bloques.append(_bloque_confirmacion(mensaje_confirmacion, use_case_entry))
+    return FlowResult(bloques=bloques, botones=botones)
+
+
+def _handle_confirm(session_key: str, session: dict, texto: str) -> FlowResult:
+    """
+    Agente 2: interpreta la respuesta libre del usuario al mensaje de
+    confirmación. Si confirma un caso de uso, ejecuta; si no, usa la
+    `query_ajustada` (o la respuesta libre) para reclasificar — sin límite de
+    reintentos.
+    """
+    pendiente = session.get("pendiente")
+    if not pendiente:
+        session["state"] = "QUERY"
+        return FlowResult(bloques=[_bloque_menu_consulta()])
+
+    respuesta_usuario = texto.strip()
+    if not respuesta_usuario:
+        # Vuelve a mostrar la misma propuesta y pide respuesta de nuevo (como el CLI).
+        use_case_entry = pendiente.get("use_case_entry")
+        botones = _BOTON_CONFIRMAR if use_case_entry is not None else None
+        return FlowResult(
+            bloques=[_bloque_confirmacion(pendiente["mensaje"], use_case_entry)],
+            botones=botones,
+        )
+
+    logger = _get_logger(session_key)
+    q = logger.current or logger.nueva_consulta()
+
+    interpretacion = cli._interpretar_confirmacion(pendiente["mensaje"], respuesta_usuario)
+    q.confirmado = interpretacion["confirmado"]
+    q.intentos_confirmacion = pendiente.get("intentos", 0) + 1
+
+    use_case_entry = pendiente.get("use_case_entry")
+    if interpretacion["confirmado"] and use_case_entry is not None:
+        return _ejecutar_pendiente(session_key, session)
+
+    # No confirmó (o no había caso): reclasifica con el ajuste sugerido o, si no
+    # hay, con su respuesta libre.
+    query_clasificar = interpretacion["query_ajustada"] or respuesta_usuario
+    return _proponer_caso(session_key, session, q, query_clasificar, query_clasificar)
+
+
+def _ejecutar_pendiente(session_key: str, session: dict) -> FlowResult:
+    """
+    Ejecuta el caso de uso confirmado: extrae entidades, valida filtros
+    requeridos y ejecuta SQL/RAG/multiple. Réplica del cuerpo post-confirmación
+    de ciclo_consultas.
+    """
+    pendiente = session.get("pendiente") or {}
+    use_case_entry = pendiente.get("use_case_entry")
+    if not use_case_entry:
+        session["state"] = "QUERY"
+        return FlowResult(bloques=[_bloque_menu_consulta()])
+
+    logger = _get_logger(session_key)
+    q = logger.current
+    if q is None:
+        q = logger.nueva_consulta()
+        q.query_original = pendiente.get("user_query_efectiva", "")
+        q.caso_nombre = use_case_entry["nombre"]
+        q.caso_catalogo = use_case_entry.get("catalogo")
+
     pregunta = use_case_entry["pregunta"]
-    q.caso_nombre = nombre_caso
-    q.caso_catalogo = use_case_entry.get("catalogo")
-
-    historial_reciente = session.get("historial_reciente", [])
-    historial_reciente.append(user_query_efectiva)
-    session["historial_reciente"] = historial_reciente[-_MAX_HISTORIAL:]
-
-    # Pre-detectar entidades (solo para SQL individual) — usa la query reescrita
     tipo_pregunta = pregunta.get("tipo")
-    entidades_previas = {}
+    user_query = pendiente.get("user_query_efectiva", "")
+
+    sql_filtro = session.get("sql_filtro")
+    filtro_fijo_key = session.get("filtro_fijo_key")
+    tipo_key = session.get("tipo_key", "1")
+    agency_name = session.get("agency_name")
+
+    bloques: list[Bloque] = []
+
+    # ── Pre-detección de entidades (réplica de ciclo_consultas, post-confirmación) ─
+    entidades_previas: dict = {}
     if tipo_pregunta == "sql":
         _t = time.perf_counter()
         entidades_previas = cli.extraer_entidades(
-            user_query_efectiva, pregunta.get("parametros", []), filtro_fijo_key
+            user_query, pregunta.get("parametros", []), filtro_fijo_key
         )
         q.latencia_entidades_ms = int((time.perf_counter() - _t) * 1000)
         q.entidades = [
             {"param": p, "label": v[2], "valor": v[0], "score": v[1]}
             for p, v in entidades_previas.items()
         ]
-
-    # Réplica de main.py: el CLI ya solo muestra el flujo identificado — los
-    # detalles de entidades y consultas paralelas se omiten de la interfaz,
-    # pero se conservan en flujo_data para debug/tracking.
-    flujo_lineas = [
-        "",
-        f"  Tu pregunta se ha identificado mediante el flujo: {nombre_caso} con un nivel de coincidencia del {score:.2f}%.",
-    ]
-    flujo_data: dict = {"nombre": nombre_caso, "score": score, "entidades": [], "multiple": None}
-
-    if tipo_pregunta == "multiple":
+    elif tipo_pregunta == "multiple":
         catalogo_actual = cli.USE_CASES["options"].get(use_case_entry["catalogo"], {})
         preguntas_map_actual = {p["id"]: p for p in catalogo_actual.get("preguntas", [])}
-        invoca_nombres = [
-            preguntas_map_actual[i]["texto"]
-            for i in pregunta.get("invoca", [])
-            if i in preguntas_map_actual
-        ]
-        # Extraer entidades por sub-caso (usa la query ORIGINAL) — solo para data
         sub_pqs = [preguntas_map_actual[i] for i in pregunta.get("invoca", []) if i in preguntas_map_actual]
         entidades_por_subcaso: dict = {}
         for sp in sub_pqs:
@@ -619,13 +721,7 @@ def _pipeline_consulta(session_key: str, session: dict, user_query: str) -> Flow
                 entidades_por_subcaso[sp["texto"]] = cli.extraer_entidades(
                     user_query, sp["parametros"], filtro_fijo_key
                 )
-        subcasos_data = [
-            {"nombre": nombre_sp, "entidades": _entidades_data(ents)}
-            for nombre_sp, ents in entidades_por_subcaso.items()
-        ]
-        flujo_data["multiple"] = {"invoca_nombres": invoca_nombres, "subcasos": subcasos_data}
         # Fusionar para ejecución (sin duplicados, el primero gana) — réplica de main.py
-        entidades_previas = {}
         for ents in entidades_por_subcaso.values():
             for param, val in ents.items():
                 if param not in entidades_previas:
@@ -635,14 +731,10 @@ def _pipeline_consulta(session_key: str, session: dict, user_query: str) -> Flow
                 {"param": p, "label": v[2], "valor": v[0], "score": v[1]}
                 for p, v in entidades_previas.items()
             ]
-    elif entidades_previas:
-        flujo_data["entidades"] = _entidades_data(entidades_previas)
-
-    bloques.append(Bloque("flujo", "\n".join(flujo_lineas), data=flujo_data))
 
     q.tipo_ejecucion = tipo_pregunta
 
-    # ── Validación de filtros requeridos + confirmación ───────────────────────
+    # ── Validación de filtros requeridos ──────────────────────────────────────
     filtros_req_pre = pregunta.get("filtros_requeridos", [])
     if filtros_req_pre and tipo_pregunta != "rag" and not all(p in entidades_previas for p in filtros_req_pre):
         labels_req_pre = [cli.PARAM_TO_FILTRO[p][1] for p in filtros_req_pre if p in cli.PARAM_TO_FILTRO]
@@ -657,100 +749,30 @@ def _pipeline_consulta(session_key: str, session: dict, user_query: str) -> Flow
         session["state"] = "REFORMULAR"
         return FlowResult(bloques=bloques)
 
-    session["state"] = "CONFIRM"
-    session["pendiente"] = {
-        "catalogo": use_case_entry.get("catalogo"),
-        "pregunta": pregunta,
-        "nombre_caso": nombre_caso,
-        "tipo_pregunta": tipo_pregunta,
-        "user_query": user_query,
-        "entidades": _entidades_a_json(entidades_previas),
-    }
-    bloques.append(Bloque("confirmar_prompt", "\n" + _PROMPT_CONFIRMAR))
-    return FlowResult(bloques=bloques, botones=_BOTONES_CONFIRMAR)
-
-
-def _handle_confirm(session_key: str, session: dict, texto: str) -> FlowResult:
-    respuesta = texto.strip().upper()
-    if respuesta == OMITIR_SENTINEL.upper() or respuesta == "OMITIR":
-        respuesta = ""
-
-    if respuesta not in ("S", "N", ""):
-        bloques = [
-            Bloque("invalida", "  ⚠  Opción no válida. Por favor ingrese: S / N / Enter.\n"),
-            Bloque("confirmar_prompt", _PROMPT_CONFIRMAR),
-        ]
-        return FlowResult(bloques=bloques, botones=_BOTONES_CONFIRMAR)
-
-    logger = _get_logger(session_key)
-
-    if respuesta == "N":
-        # VoverError → "Volviendo al menú principal..."
-        logger.cerrar_consulta()
-        session.pop("pendiente", None)
-        session["state"] = "QUERY"
-        bloques = [
-            Bloque("volver", "\n  Volviendo al menú principal...\n"),
-            _bloque_menu_consulta(),
-        ]
-        return FlowResult(bloques=bloques)
-
-    return _ejecutar_pendiente(session_key, session, confirmar=respuesta)
-
-
-def _ejecutar_pendiente(session_key: str, session: dict, confirmar: str) -> FlowResult:
-    pendiente = session.pop("pendiente", None)
-    session["state"] = "QUERY"
-    if not pendiente:
-        return FlowResult(bloques=[_bloque_menu_consulta()])
-
-    logger = _get_logger(session_key)
-    q = logger.current
-    if q is None:
-        # El proceso se reinició entre la pregunta y la confirmación
-        q = logger.nueva_consulta()
-        q.query_original = pendiente["user_query"]
-        q.caso_nombre = pendiente["nombre_caso"]
-        q.caso_catalogo = pendiente["catalogo"]
-        q.tipo_ejecucion = pendiente["tipo_pregunta"]
-
-    pregunta = pendiente["pregunta"]
-    tipo_pregunta = pendiente["tipo_pregunta"]
-    user_query = pendiente["user_query"]
-    entidades_previas = _entidades_de_json(pendiente["entidades"])
-
-    sql_filtro = session.get("sql_filtro")
-    filtro_fijo_key = session.get("filtro_fijo_key")
-    tipo_key = session.get("tipo_key", "3")
-    agency_name = session.get("agency_name")
-
-    bloques: list[Bloque] = []
-
     # Reiniciar timer: excluir el tiempo que el usuario tardó en confirmar
     q.reiniciar_timer()
 
     if tipo_pregunta == "multiple":
         bloques.append(Bloque("procesando", "\n  Procesando su consulta, por favor espere..."))
-        salida, _ = _capturado(
+        salida, respuesta = _capturado(
             cli.ejecutar_multiple,
-            pregunta, pendiente["catalogo"], sql_filtro, filtro_fijo_key, user_query,
+            pregunta, use_case_entry["catalogo"], sql_filtro, filtro_fijo_key, user_query,
             entidades_previas, tipo_key=tipo_key, agency_name=agency_name,
         )
         bloques.append(Bloque("multiple_exec", salida, data=_parse_resultado_multiple(salida)))
+        respuesta_mostrada = respuesta if isinstance(respuesta, str) else _parse_resultado_multiple(salida)["respuesta"]
     elif tipo_pregunta == "rag":
-        salida, _ = _capturado(
+        salida, respuesta = _capturado(
             cli.ejecutar_rag,
             pregunta, user_query, query_log=q, agency_name=agency_name, tipo_key=tipo_key,
         )
         bloques.append(Bloque("rag", salida, data=_parse_rag_salida(salida)))
+        respuesta_mostrada = respuesta if isinstance(respuesta, str) else _parse_rag_salida(salida)["respuesta"]
     else:
-        texto_usuario = user_query if confirmar == "S" else ""
-        entidades = entidades_previas if confirmar == "S" else {}
-
         bloques.append(Bloque("procesando", "\n  Procesando su consulta, por favor espere..."))
         salida, respuesta = _capturado(
             cli.ejecutar_consulta,
-            pregunta, sql_filtro, entidades, texto_usuario, query_log=q, tipo_key=tipo_key,
+            pregunta, sql_filtro, entidades_previas, user_query, query_log=q, tipo_key=tipo_key,
         )
         if salida:
             bloques.append(Bloque("sql_debug", salida))
@@ -759,50 +781,30 @@ def _ejecutar_pendiente(session_key: str, session: dict, confirmar: str) -> Flow
             "\nRESULTADO:\n" + _SEP + "\n" + respuesta,
             data={"respuesta": respuesta},
         ))
+        respuesta_mostrada = respuesta
 
+    # Historial conversacional: incluye la respuesta real del asistente.
+    _registrar_turno(session, user_query, respuesta_mostrada or "")
+
+    session.pop("pendiente", None)
     logger.cerrar_consulta()
 
     session["state"] = "OTRA"
     bloques.append(Bloque("otra_prompt", "\n" + _PROMPT_OTRA))
-    return FlowResult(bloques=bloques, botones=_BOTONES_SN)
-
-
-def _handle_retry(session_key: str, session: dict, texto: str) -> FlowResult:
-    respuesta = texto.strip().upper()
-    if respuesta not in ("S", "N"):
-        bloques = [
-            Bloque("invalida", "  ⚠  Opción no válida. Por favor ingrese: S / N.\n"),
-            Bloque("retry_prompt", _PROMPT_RETRY),
-        ]
-        return FlowResult(bloques=bloques, botones=_BOTONES_SN)
-
-    logger = _get_logger(session_key)
-    logger.cerrar_consulta()
-
-    if respuesta != "S":
-        return FlowResult(
-            bloques=[Bloque("despedida", "\nGracias por utilizar el Sistema de Consultas IA. ¡Hasta pronto!")],
-            terminado=True,
-        )
-
-    session["state"] = "QUERY"
-    return FlowResult(bloques=[_bloque_menu_consulta()])
+    return FlowResult(bloques=bloques)
 
 
 def _handle_otra(session_key: str, session: dict, texto: str) -> FlowResult:
-    respuesta = texto.strip().upper()
-    if respuesta not in ("S", "N"):
-        bloques = [
-            Bloque("invalida", "  ⚠  Opción no válida. Por favor ingrese: S / N.\n"),
-            Bloque("otra_prompt", _PROMPT_OTRA),
-        ]
-        return FlowResult(bloques=bloques, botones=_BOTONES_SN)
-
-    if respuesta != "S":
+    """
+    "¿Hay algo más...?" en lenguaje libre: si el usuario no quiere nada más
+    (vacío o _PALABRAS_NO) cierra; si escribe otra consulta, se encadena
+    directo como nueva consulta (réplica de _next_query en el CLI).
+    """
+    if not texto or texto.lower() in cli._PALABRAS_NO:
         return FlowResult(
             bloques=[Bloque("despedida", "\nGracias por utilizar el Sistema de Consultas IA. ¡Hasta pronto!")],
             terminado=True,
         )
 
     session["state"] = "QUERY"
-    return FlowResult(bloques=[Bloque("salto", ""), _bloque_menu_consulta()])
+    return _pipeline_consulta(session_key, session, texto)

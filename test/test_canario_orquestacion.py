@@ -37,13 +37,14 @@ import main as cli
 # función de main.py → (hash de su código fuente, archivo espejo que la replica/parsea)
 HASHES_ESPERADOS = {
     "_input":               ("7a28cb180dfedc18", "core/guided_flow.py (_procesar: keywords globales, saludo, escalar)"),
-    "_input_sn":            ("e871b74914d3ccdd", "core/guided_flow.py (validación S/N en CONFIRM/RETRY/OTRA)"),
+    "seleccionar_caso_de_uso_llm": ("f6b8ac355426f1fc", "core/guided_flow.py (_proponer_caso — Agente 1: clasificación + meta)"),
+    "_interpretar_confirmacion":   ("9a6569bb9f560cb7", "core/guided_flow.py (_handle_confirm — Agente 2: confirmación libre)"),
     "identificar_usuario":  ("b79fa2109c59cdc2", "core/guided_flow.py (_handle_ident_tipo, _handle_ident_valor)"),
-    "ciclo_consultas":      ("ae0b6bff54eede67", "core/guided_flow.py (_pipeline_consulta, _handle_confirm, _ejecutar_pendiente)"),
+    "ciclo_consultas":      ("1bce0d83c295fc1f", "core/guided_flow.py (_pipeline_consulta, _handle_confirm, _ejecutar_pendiente)"),
     "main":                 ("bb65e7d5aa2af899", "core/guided_flow.py (_completar_identificacion, iniciar_sesion)"),
-    "ejecutar_rag":         ("8655045ce12df7a0", "core/guided_flow.py (_parse_rag_salida — formato de prints parseado)"),
-    "ejecutar_multiple":    ("c92fd29af5b7dd07", "core/guided_flow.py (_parse_resultado_multiple — formato de prints parseado)"),
-    "_mostrar_instrucciones": ("f31a42b2ff0895e5", "adapters/chat_render.py (_transformar_instrucciones — formato de pantalla parseado)"),
+    "ejecutar_rag":         ("38e3d775eccb075e", "core/guided_flow.py (_parse_rag_salida — formato de prints parseado)"),
+    "ejecutar_multiple":    ("c9fad1522d4e5807", "core/guided_flow.py (_parse_resultado_multiple — formato de prints parseado)"),
+    "_mostrar_instrucciones": ("b0f2a0808ae8e9df", "adapters/chat_render.py (_transformar_instrucciones — formato de pantalla parseado)"),
 }
 
 

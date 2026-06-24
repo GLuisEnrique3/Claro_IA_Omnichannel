@@ -5,9 +5,9 @@ from dotenv import load_dotenv
 from sentence_transformers import SentenceTransformer
 from pypdf import PdfReader
 
-# =========================================================
+
 # CONFIG
-# =========================================================
+
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PDF_DIR = os.path.join(BASE_DIR, "pdf")
@@ -21,11 +21,71 @@ EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 CHUNK_SIZE = 500
 MAX_CHARS_PER_CHUNK = 600
 
-# =========================================================
+
 # DOCUMENT CONFIGURATION
-# =========================================================
+
 
 DOCUMENTS = [
+    {
+        "filename": "Guia_Gestion_Contrato_Humana_ARC.pdf",
+        "collection": "instructivos_contratos_arc",
+        "chunking": "sliding",
+        "metadata": {
+            "carrier": "HUMANA",
+            "line_of_business":"",
+            "category": "instructivos_contratos_arc"
+        }
+    },
+    {
+        "filename": "Guia_Gestion_Contrato_CareSource_ARC.pdf",
+        "collection": "instructivos_contratos_arc",
+        "chunking": "sliding",
+        "metadata": {
+            "carrier": "CARESOURCE",
+            "line_of_business":"",
+            "category": "instructivos_contratos_arc"
+        }
+    },
+    {
+        "filename": "Guia_Gestion_Contrato_Ascension_ARC.pdf",
+        "collection": "instructivos_contratos_arc",
+        "chunking": "sliding",
+        "metadata": {
+            "carrier": "ASCENSION",
+            "line_of_business":"",
+            "category": "instructivos_contratos_arc"
+        }
+    },
+    {
+        "filename": "Guia_Gestion_Contrato_AmeriHealth_ARC.pdf",
+        "collection": "instructivos_contratos_arc",
+        "chunking": "sliding",
+        "metadata": {
+            "carrier": "AMERIHEALTH",
+            "line_of_business":"",
+            "category": "instructivos_contratos_arc"
+        }
+    },
+    {
+        "filename": "Guia_Gestion_Contrato_Ambetter_ARC.pdf",
+        "collection": "instructivos_contratos_arc",
+        "chunking": "sliding",
+        "metadata": {
+            "carrier": "AMBETTER",
+            "line_of_business":"",
+            "category": "instructivos_contratos_arc"
+        }
+    },
+    {
+        "filename": "Guia_Gestion_Contrato_Alliant_ARC.pdf",
+        "collection": "instructivos_contratos_arc",
+        "chunking": "sliding",
+        "metadata": {
+            "carrier": "ALLIANT",
+            "line_of_business":"",
+            "category": "instructivos_contratos_arc"
+        }
+    },
     {
         "filename": "2026_ACA_Bonus_Compensation.pdf",
         "collection": "bonus_compensation_aca",
@@ -200,6 +260,7 @@ DOCUMENTS = [
             "category": "calendario_comisiones"
         }
     },
+
     {
         "filename": "CM-IN-02 Instructivo Gestión de contratos con OSCAR ACA.pdf",
         "collection": "instructivos_contratos_aca",
@@ -547,9 +608,9 @@ DOCUMENTS = [
     }
     ]
 
-# =========================================================
+
 # PDF EXTRACTION
-# =========================================================
+
 
 def extract_pages(pdf_path: str) -> list[tuple[int, str]]:
     reader = PdfReader(pdf_path)
@@ -564,9 +625,9 @@ def extract_pages(pdf_path: str) -> list[tuple[int, str]]:
 
     return pages
 
-# =========================================================
+
 # CHUNKING METHODS
-# =========================================================
+
 
 def sentence_chunks(text: str) -> list[str]:
     sentences = re.split(r'(?<=[.!?:])\s+', text.strip())
@@ -629,17 +690,17 @@ def generate_chunks(text: str, strategy: str) -> list[str]:
     else:
         raise ValueError(f"Estrategia desconocida: {strategy}")
 
-# =========================================================
+
 # CHROMA
-# =========================================================
+
 
 chroma_client = ChromaClient(path=os.getenv("CHROMA_PATH", "./chroma_db"))
 
 model = SentenceTransformer(EMBEDDING_MODEL)
 
-# =========================================================
+
 # PROCESS DOCUMENTS
-# =========================================================
+
 
 for doc_config in DOCUMENTS:
 
@@ -769,8 +830,8 @@ for doc_config in DOCUMENTS:
         f"→ {total_chunks} chunks"
     )
 
-# =========================================================
+
 # DONE
-# =========================================================
+
 
 print("\nProcesamiento completado.")
