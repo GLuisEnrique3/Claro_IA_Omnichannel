@@ -27,6 +27,66 @@ MAX_CHARS_PER_CHUNK = 600
 
 DOCUMENTS = [
     {
+        "filename": "Guia_Gestion_Contrato_Humana_ARC.pdf",
+        "collection": "instructivos_contratos_arc",
+        "chunking": "sliding",
+        "metadata": {
+            "carrier": "HUMANA",
+            "line_of_business":"",
+            "category": "instructivos_contratos_arc"
+        }
+    },
+    {
+        "filename": "Guia_Gestion_Contrato_CareSource_ARC.pdf",
+        "collection": "instructivos_contratos_arc",
+        "chunking": "sliding",
+        "metadata": {
+            "carrier": "CARESOURCE",
+            "line_of_business":"",
+            "category": "instructivos_contratos_arc"
+        }
+    },
+    {
+        "filename": "Guia_Gestion_Contrato_Ascension_ARC.pdf",
+        "collection": "instructivos_contratos_arc",
+        "chunking": "sliding",
+        "metadata": {
+            "carrier": "ASCENSION",
+            "line_of_business":"",
+            "category": "instructivos_contratos_arc"
+        }
+    },
+    {
+        "filename": "Guia_Gestion_Contrato_AmeriHealth_ARC.pdf",
+        "collection": "instructivos_contratos_arc",
+        "chunking": "sliding",
+        "metadata": {
+            "carrier": "AMERIHEALTH",
+            "line_of_business":"",
+            "category": "instructivos_contratos_arc"
+        }
+    },
+    {
+        "filename": "Guia_Gestion_Contrato_Ambetter_ARC.pdf",
+        "collection": "instructivos_contratos_arc",
+        "chunking": "sliding",
+        "metadata": {
+            "carrier": "AMBETTER",
+            "line_of_business":"",
+            "category": "instructivos_contratos_arc"
+        }
+    },
+    {
+        "filename": "Guia_Gestion_Contrato_Alliant_ARC.pdf",
+        "collection": "instructivos_contratos_arc",
+        "chunking": "sliding",
+        "metadata": {
+            "carrier": "ALLIANT",
+            "line_of_business":"",
+            "category": "instructivos_contratos_arc"
+        }
+    },
+    {
         "filename": "2026_ACA_Bonus_Compensation.pdf",
         "collection": "bonus_compensation_aca",
         "chunking": "sliding",
@@ -200,6 +260,7 @@ DOCUMENTS = [
             "category": "calendario_comisiones"
         }
     },
+
     {
         "filename": "CM-IN-02 Instructivo Gestión de contratos con OSCAR ACA.pdf",
         "collection": "instructivos_contratos_aca",

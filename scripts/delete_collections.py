@@ -12,7 +12,7 @@ from config.chroma_client import ChromaClient
 #COLLECTION_NAME = "instructivos_contratos_supplementary"
 
 COLLECTIONS_TO_DELETE = [
-    "bonus_compensation",
+    "instructivos_aca",
 ]
 
 # CONNECT

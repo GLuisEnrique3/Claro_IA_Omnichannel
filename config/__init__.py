@@ -20,7 +20,7 @@ vertexai.init(
     credentials=_credentials,
 )
 
-llm_model     = GenerativeModel("gemini-2.5-flash-lite")  # resumen de resultados
+llm_model     = GenerativeModel("gemini-2.5-flash") 
 llm_sql_model = GenerativeModel("gemini-2.5-pro")         # construcción de SQL
 
 #---- Consultas BigQuery ----#

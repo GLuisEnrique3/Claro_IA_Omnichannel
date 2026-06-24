@@ -40,7 +40,7 @@ main.py
 │   ├── _LLM_MAX_RETRIES, _llm_call()        → retry/backoff ante rate limit (429)
 │   ├── _MESES_NUM / _MESES_ES               → parser de fechas en español
 │   ├── USE_CASES (data/use_cases.json)      → catálogo de "qué se puede preguntar"
-│   ├── TIPOS_USUARIO                        → 1=Agencia, 2=NPN, 3=Management
+│   ├── TIPOS_USUARIO                        → 1=Agencia, 2=NPN
 │   ├── PARAM_TO_FILTRO                       → mapa columna SQL → cómo detectarla en texto libre
 │   └── Excepciones de control: SalirError / VoverError / MenuError
 │

@@ -1,6 +1,6 @@
 # Claro Insurance — Omnichannel IA
 
-Sistema de consulta inteligente en lenguaje natural para datos operativos de Claro Insurance. Permite a representantes de agencias, agentes NPN y personal de gerencia consultar contratos, comisiones, pagos y documentos normativos en español, usando modelos de lenguaje generativo y búsqueda semántica.
+Sistema de consulta inteligente en lenguaje natural para datos operativos de Claro Insurance. Permite a representantes de agencias y agentes NPN consultar contratos, comisiones, pagos y documentos normativos en español, usando modelos de lenguaje generativo y búsqueda semántica.
 
 ---
 
@@ -10,17 +10,17 @@ Sistema de consulta inteligente en lenguaje natural para datos operativos de Cla
 Usuario (texto en español)
         │
         ▼
-  Reescritura con contexto         ← Gemini Flash Lite (usa el turno anterior: pregunta + respuesta real)
+  Reescritura con contexto         ← Gemini 2.5 Flash (usa el turno anterior: pregunta + respuesta real)
         │
         ▼
   ┌─────────────────────────────────────────────────────────┐
   │  Agente 1 — Identificación de intención                  │
-  │  ← Gemini Flash Lite, clasifica contra "usa_esto_cuando"  │
+  │  ← Gemini 2.5 Flash, clasifica contra "usa_esto_cuando"    │
   │    de cada caso de uso permitido, o detecta que es una     │
   │    pregunta conversacional/meta sobre el propio asistente   │
   │                                                             │
   │  Agente 2 — Confirmación                                   │
-  │  ← Gemini Flash Lite interpreta la respuesta del usuario:   │
+  │  ← Gemini 2.5 Flash interpreta la respuesta del usuario:    │
   │    confirmó / corrigió / rechazó. Sin límite de reintentos  │
   │    — sigue afinando hasta que el usuario confirme o use un  │
   │    comando global (salir, volver, nueva sesión)              │
@@ -29,9 +29,9 @@ Usuario (texto en español)
         ▼ (una vez confirmado)
   Extracción de entidades          ← N-gramas + embeddings precalculados + regex (fechas, NPN, pólizas, IDs)
         │
-        ├──── SQL ──────────────→ Gemini Pro construye el SQL → BigQuery → Gemini Flash Lite redacta la respuesta
-        ├──── RAG ──────────────→ ChromaDB (top 5 docs) → Gemini Flash Lite redacta la respuesta
-        └──── MULTIPLE ─────────→ Ejecución paralela de varios sub-casos (SQL+RAG) → síntesis con Gemini Flash Lite
+        ├──── SQL ──────────────→ Gemini Pro construye el SQL → BigQuery → Gemini 2.5 Flash redacta la respuesta
+        ├──── RAG ──────────────→ ChromaDB (top 5 docs) → Gemini 2.5 Flash redacta la respuesta
+        └──── MULTIPLE ─────────→ Ejecución paralela de varios sub-casos (SQL+RAG) → síntesis con Gemini 2.5 Flash
         │
         ▼
   Log asíncrono (JSONL + BigQuery)
@@ -46,21 +46,18 @@ Usuario (texto en español)
 
 | Componente | Tecnología | Rol |
 |---|---|---|
-| LLM conversacional | Gemini 2.5 Flash Lite (Vertex AI) | Reescritura con contexto, Agente 1 (clasificación + respuestas meta), Agente 2 (interpretación de confirmación), síntesis de respuestas |
+| LLM conversacional | Gemini 2.5 Flash (Vertex AI) | Reescritura con contexto, Agente 1 (clasificación + respuestas meta), Agente 2 (interpretación de confirmación), síntesis de respuestas |
 | LLM SQL | Gemini 2.5 Pro (Vertex AI) | Generación de SQL para BigQuery |
 | Base de datos | Google BigQuery | Fuente de datos operativos |
 | Vector store | ChromaDB (local persistente) | RAG sobre documentos normativos |
 | Embeddings | `all-MiniLM-L6-v2` (SentenceTransformers) | Identificación de usuario (agencia/NPN) y extracción de entidades (carrier, estado, etc.) por similitud coseno — **no** se usa para detectar el caso de uso, eso lo hace el LLM directamente |
 | Logs | JSONL diario + tabla BigQuery | Trazabilidad y monitoreo |
 
-### Interfaces disponibles
+### Interfaz
 
 | Interfaz | Cómo correrla | Notas |
 |---|---|---|
 | CLI (consola) | `python main.py` | Identificación y consultas por texto plano en la terminal. |
-| Web (Streamlit) | `streamlit run app/app_streamlit.py` | Login propio (`app/users.json`) + identificación de usuario, chat con historial visual, sidebar de debug (query reescrita, SQL ejecutado, chunks RAG, latencias). Usa el mismo flujo conversacional que el CLI (texto libre para confirmar, sin botones, sin límite de reintentos). |
-
-Ambas interfaces reutilizan las mismas funciones de `main.py` (clasificación, extracción de entidades, construcción de SQL, RAG). `app/engine.py` reimplementa las versiones de ejecución SQL/RAG/multiple para devolver texto en vez de imprimir por consola.
 
 ---
 
@@ -68,15 +65,9 @@ Ambas interfaces reutilizan las mismas funciones de `main.py` (clasificación, e
 
 ```
 Omnichannel - Chroma/
-├── main.py                        # Núcleo de la aplicación (CLI + lógica compartida)
+├── main.py                        # Núcleo de la aplicación (CLI)
 ├── .env                           # Variables de entorno (no se sube al repo)
 ├── env_example.txt                # Plantilla de variables de entorno
-│
-├── app/
-│   ├── app_streamlit.py           # Interfaz web (chat, login, sidebar de debug)
-│   ├── engine.py                  # Versiones de ejecución SQL/RAG/multiple que devuelven texto
-│   ├── users.json                 # Credenciales de acceso a la app web
-│   └── requirements.txt           # Dependencias específicas de la app web
 │
 ├── config/
 │   ├── __init__.py                # Inicialización de Vertex AI y BigQuery
@@ -97,12 +88,14 @@ Omnichannel - Chroma/
 │   └── delete_collections.py      # Limpieza de colecciones en ChromaDB
 │
 ├── test/
+│   ├── format_pdf.py                     # Convierte .docx de ./words/ a PDF semántico (Gemini) para indexar
 │   ├── revisar_filtros_validos.py        # Verifica filtros cacheados
 │   ├── revisar_use_cases_embeddings.py   # (legado, ver nota abajo)
-│   └── revisar_embeddings.py             # Verifica embeddings de documentos
+│   ├── revisar_embeddings.py             # Verifica embeddings de documentos
+│   └── check_pgvector.py                 # Inspección ad-hoc de una colección de ChromaDB
 │
-├── pdf/                            # Documentos fuente para RAG (PDFs)
-├── words/                          # Documentos fuente para RAG (.docx, instructivos por carrier)
+├── pdf/                            # Documentos fuente para RAG (PDFs), incluye los convertidos desde ./words/
+├── words/                          # Documentos fuente en .docx (instructivos por carrier) — requieren conversión previa con test/format_pdf.py
 ├── chroma_db/                      # Almacenamiento persistente de ChromaDB
 ├── logs/                           # Logs diarios en formato JSONL
 ├── docs/                           # Documentación adicional del proyecto
@@ -132,8 +125,11 @@ Omnichannel - Chroma/
 ```bash
 pip install python-dotenv google-cloud-aiplatform google-auth \
     google-cloud-bigquery chromadb sentence-transformers \
-    pypdf numpy python-docx
+    pypdf numpy python-docx reportlab
 ```
+
+> `reportlab` y `python-docx` solo son necesarios para `test/format_pdf.py` (conversión
+> `.docx` → PDF antes de indexar). Si no vas a procesar documentos `.docx`, podés omitirlos.
 
 ### 3. Configurar variables de entorno
 
@@ -165,9 +161,20 @@ Genera:
 - `data/filtros_validos.pkl`
 - `data/filtros_embeddings.pkl`
 
-### Paso 2 — Indexar documentos normativos en ChromaDB
+### Paso 2 — (solo si hay `.docx` nuevos en `./words/`) Convertir a PDF
 
-Lee los PDFs/`.docx` de `./pdf/` y `./words/`, los divide en chunks y los almacena en ChromaDB con sus embeddings.
+`scripts/precalcular_embeddings.py` solo indexa PDFs desde `./pdf/` — **no** lee `.docx`
+directamente. Si el documento fuente está en `./words/` (`.docx`), primero hay que
+convertirlo con `test/format_pdf.py`, que usa Gemini para extraer texto, interpretar
+imágenes/tablas y generar un PDF semántico limpio en `./pdf/`:
+
+```bash
+python test/format_pdf.py
+```
+
+### Paso 3 — Indexar documentos normativos en ChromaDB
+
+Lee los PDFs de `./pdf/` (según la configuración en `scripts/precalcular_embeddings.py`), los divide en chunks y los almacena en ChromaDB con sus embeddings.
 
 ```bash
 python scripts/precalcular_embeddings.py
@@ -184,24 +191,15 @@ Genera colecciones en `./chroma_db/` para búsqueda semántica (RAG).
 
 ## Ejecución
 
-Con los precálculos completos, podés iniciar cualquiera de las dos interfaces:
+Con los precálculos completos:
 
-**Consola (CLI):**
 ```bash
 python main.py
 ```
 
-**Web (Streamlit):**
-```bash
-streamlit run app/app_streamlit.py
-```
-La app web pide primero credenciales propias (`app/users.json`, gestionable con
-`scripts/manage_users.py`) y luego la identificación de usuario de negocio (agencia /
-NPN / management), igual que el CLI.
-
-En ambos casos, tras identificarte el sistema entra en el ciclo de consultas: escribís
-tu pregunta en lenguaje natural, el Agente 1 propone un caso de uso, y confirmás o
-corregís con texto libre hasta que se ejecute.
+Tras identificarte, el sistema entra en el ciclo de consultas: escribís tu pregunta en
+lenguaje natural, el Agente 1 propone un caso de uso, y confirmás o corregís con texto
+libre hasta que se ejecute.
 
 ---
 
@@ -209,13 +207,12 @@ corregís con texto libre hasta que se ejecute.
 
 ### Identificación de usuario
 
-El sistema reconoce tres tipos de usuario:
+El sistema reconoce dos tipos de usuario:
 
 | Tipo | Descripción | Catálogos disponibles |
 |---|---|---|
 | 1 | Representante de Agencia | A, B, C |
 | 2 | Agente NPN | A, B, C |
-| 3 | Gerencia | A, B, C |
 
 La identificación usa matching semántico (embeddings + umbral de confianza configurable entre 0.65 y 0.95 según el tipo).
 
@@ -237,8 +234,8 @@ La identificación usa matching semántico (embeddings + umbral de confianza con
 
 6. **Ejecución**:
    - `sql`: Gemini Pro genera una query BigQuery a partir de la plantilla `sql_by_role` (una por tipo de usuario) definida en `use_cases.json`, inyectando el filtro fijo del usuario y los filtros dinámicos detectados. Si BigQuery falla, reintenta hasta 2 veces, pasándole el error al modelo para que corrija el SQL. Solo se permiten consultas `SELECT` — cualquier intento de `INSERT`, `UPDATE`, `DELETE`, `DROP`, etc. es bloqueado por regex antes de ejecutarse.
-   - `rag`: codifica la consulta y busca en ChromaDB los 5 fragmentos más relevantes (3 en flujos `multiple`). Gemini Flash Lite redacta la respuesta basándose únicamente en esos fragmentos.
-   - `multiple`: ejecuta varios sub-casos (SQL y/o RAG) en paralelo (`ThreadPoolExecutor`) y fusiona los resultados en una sola respuesta con Gemini Flash Lite.
+   - `rag`: codifica la consulta y busca en ChromaDB los 5 fragmentos más relevantes (3 en flujos `multiple`). Gemini 2.5 Flash redacta la respuesta basándose únicamente en esos fragmentos.
+   - `multiple`: ejecuta varios sub-casos (SQL y/o RAG) en paralelo (`ThreadPoolExecutor`) y fusiona los resultados en una sola respuesta con Gemini 2.5 Flash.
 
 ### Sistema de logging
 
@@ -263,7 +260,7 @@ Los casos de uso están definidos en `data/use_cases.json`. Cada caso incluye:
 
 - `tipo`: `sql`, `rag`, o `multiple`
 - `usa_esto_cuando`: descripción en lenguaje natural de cuándo aplica este caso — es lo que lee el Agente 1 (LLM) para clasificar la consulta del usuario
-- `sql_by_role`: plantillas de query por tipo de usuario (`"1"`, `"2"`, `"3"`) con placeholder `{dynamic_filters}` para el filtro fijo del usuario identificado
+- `sql_by_role`: plantillas de query por tipo de usuario (`"1"`, `"2"`) con placeholder `{dynamic_filters}` para el filtro fijo del usuario identificado
 - `parametros`: lista de columnas SQL (`PARAM_TO_FILTRO`) que el caso puede recibir como filtro dinámico
 - `descripciones`: definición de esas columnas para que el LLM las use correctamente al construir el SQL y al redactar la respuesta
 - `filtros_requeridos`: parámetros obligatorios — si no se detectan, no se ejecuta nada y se le pide al usuario que los incluya
@@ -272,13 +269,13 @@ Los casos de uso están definidos en `data/use_cases.json`. Cada caso incluye:
 - `semantic_examples`: variaciones en lenguaje natural — **campo legado**, ya no se usa para clasificar (ver nota sobre `precalcular_use_cases.py` más arriba)
 
 ### Catálogo A — Contratos
-Consultas sobre estado de contratos: activos, pendientes, inactivos, detalles, licencias, validaciones.
+Cantidad/detalle de contratos (activos, pendientes, status), licencias, oportunidades de contratación por carrier, e instructivo de gestión de contratos (RAG, cubre Alliant, Ambetter, AmeriHealth, Ascension, Caresource y Humana).
 
 ### Catálogo B — Pagos y Comisiones
-Consultas sobre comisiones pagadas, preliquidaciones, reconciliaciones, pagos pendientes por agente o agencia.
+Comisiones pagadas/bloqueadas, pre-liquidaciones, detalle de comisiones y de comisiones en avance, diagnóstico de pagos no recibidos, reconciliaciones, calendarios/frecuencias de pago (RAG), y compensación Bonus/Override/Commission ACA (RAG).
 
 ### Catálogo C — Documentos Normativos
-RAG sobre PDFs institucionales: calendarios, FAQs, instructivos de carriers.
+RAG sobre documentos institucionales generales: plazos estándar de envío de contratos, horarios y roles del equipo, y FAQs (ARC Off-Exchanges, Claro Insurance).
 
 ---
 
@@ -329,7 +326,7 @@ python scripts/manage_users.py remove
 ## Agregar nuevos casos de uso
 
 1. Abrir `data/use_cases.json`
-2. Agregar un nuevo objeto dentro del catálogo correspondiente (`A`, `B`, o `C`) con los campos: `tipo`, `usa_esto_cuando`, `sql_by_role` (uno por tipo de usuario `"1"`/`"2"`/`"3"`), `parametros`, `descripciones`, `filtros_requeridos` (si aplica), `entity_resolution`, `ending_resolution`
+2. Agregar un nuevo objeto dentro del catálogo correspondiente (`A`, `B`, o `C`) con los campos: `tipo`, `usa_esto_cuando`, `sql_by_role` (uno por tipo de usuario `"1"`/`"2"`), `parametros`, `descripciones`, `filtros_requeridos` (si aplica), `entity_resolution`, `ending_resolution`
 3. Redactar bien el `usa_esto_cuando` — es el único texto que usa el Agente 1 (LLM) para decidir si este caso aplica a la consulta del usuario, no hay paso de precálculo ni embeddings que regenerar.
 
 No se requiere modificar `main.py` para agregar casos de uso estándar.
@@ -338,9 +335,13 @@ No se requiere modificar `main.py` para agregar casos de uso estándar.
 
 ## Agregar nuevos documentos normativos (RAG)
 
-1. Colocar el archivo (PDF o `.docx`) en `./pdf/` o `./words/` según corresponda
-2. Agregar su configuración en `scripts/precalcular_embeddings.py` (nombre de archivo, colección destino, metadatos como carrier y categoría, estrategia de chunking)
-3. Re-ejecutar la indexación:
+1. Colocar el archivo fuente en `./pdf/` (PDF) o `./words/` (`.docx`)
+2. Si es `.docx`, convertirlo primero a PDF (queda en `./pdf/`):
+   ```bash
+   python test/format_pdf.py
+   ```
+3. Agregar su configuración en `scripts/precalcular_embeddings.py` (nombre de archivo, colección destino, metadatos como carrier y categoría, estrategia de chunking)
+4. Re-ejecutar la indexación:
    ```bash
    python scripts/precalcular_embeddings.py
    ```

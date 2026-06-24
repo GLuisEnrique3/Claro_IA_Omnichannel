@@ -65,14 +65,6 @@ TIPOS_USUARIO = {
         "umbral": 0.95,
         "prompt_id": "Ingrese su NPN: ",
     },
-    "3": {
-        "nombre": "Management",
-        "filtro_key": None,
-        "sql_filtro": None,
-        "catalogos": ["A", "B", "C"],
-        "umbral": None,
-        "prompt_id": None,
-    },
 }
 
 # Permisos de catálogos por tipo de usuario (configurable en data/catalog_permissions.json).
@@ -87,16 +79,15 @@ except Exception:
 # ── Mapping: parámetro SQL → (filtro_key, etiqueta_display, snippet_sql, umbral) ──
 #  umbral: similitud coseno mínima para aceptar la entidad (0-1).
 PARAM_TO_FILTRO = {
-    "p.Id":               ("__opp_id__",          "ID de Oportunidad",  "AND p.Id = '{v}'",                                  None),
     "c.NPN__c":           ("npn",                "NPN",                "AND c.NPN__c = '{v}'",                              0.99),
     "c.Name":             ("name",              "Agente",             "AND c.Name = '{v}'",                                0.95),
     "a.Name_Agencies":    ("agency",             "Agencia",            "AND a.Name_Agencies = '{v}'",                       0.90),
     "o.Carrier":          ("carrier",            "Carrier",            "AND o.Carrier = '{v}'",                             0.85),
     "o.State":            ("state",              "Estado",             "AND o.State = '{v}'",                               0.80),
     "o.Line_Of_Business": ("line_of_business",   "Línea de Negocio",   "AND o.Line_Of_Business = '{v}'",                    0.80),
-    "s.StageName":        ("stage_name",         "Etapa",              "AND s.StageName = '{v}'",                           0.80),
-    "s.Sub_stage":        ("sub_stage_name",     "Sub-etapa",          "AND s.Sub_stage = '{v}'",                           0.80),
-    "ae.Name":            ("account_executives", "Ejecutivo",          "AND ae.Name = '{v}'",                               0.75),
+    "p.StageName":        ("stage_name",         "Etapa",              "AND s.StageName = '{v}'",                           0.80),
+    "p.Sub_Stage__c":        ("sub_stage_name",     "Sub-etapa",          "AND s.Sub_Stage__c = '{v}'",                           0.80),
+    "nc.Status__c":       ("contract_status",    "Estado de Contrato", "AND nc.Status__c = '{v}'",                          0.80),
     # Parámetros de tipo fecha — filtro_key "__fecha__" activa el parser de lenguaje natural
     "p.Pay_on_Date__c":      ("__fecha__",            "Fecha de Pago",    "AND DATE_TRUNC(DATE(p.Pay_on_Date__c), MONTH) = DATE '{v}'",  None),
     # Commission Month: se activa solo cuando el usuario menciona "commission month" o "mes de comision/es"
@@ -112,9 +103,9 @@ PARAM_TO_FILTRO = {
     "p.Pre_Approved__c":         ("pre_approved",       "Estado de Aprobación",        "AND p.Pre_Approved__c = '{v}'",                      0.85),
     "p.ProcessingStatus__c":     ("processing_status",  "Estado de Procesamiento",     "AND p.ProcessingStatus__c = '{v}'",                  0.85),
     # Parámetros de licencias
-    "l.LicenseState__c":  ("license_state",       "Estado de Licencia", "AND l.LicenseState__c = '{v}'",                        0.80),
+    "o.Name":             ("license_state",       "Estado (Geográfico)", "AND o.Name = '{v}'",                                  0.80),
     "l.LicenseType__c":   ("license_type",        "Tipo de Licencia",   "AND l.LicenseType__c = '{v}'",                         0.80),
-    "l.Status__c":        ("license_status",      "Estado Licencia (Activa/Inactiva)", "AND l.Status__c = '{v}'",              0.85),
+    "l.LicenseStatus__c": ("license_status",      "Estado Licencia (Activa/Inactiva)", "AND l.LicenseStatus__c = '{v}'",       0.85),
     "l.Disposition__c":   ("license_disposition", "Disposición",        "AND l.Disposition__c = '{v}'",                         0.80),
     "l.SubDisposition__c":("license_sub_disposition","Sub-Disposición", "AND l.SubDisposition__c = '{v}'",                     0.80),
     "l.Source__c":        ("license_source",      "Fuente (Interna/NIPR)", "AND l.Source__c = '{v}'",                           0.85),
@@ -185,29 +176,27 @@ def _header():
 
 _TEMAS_POR_CATALOGO = {
     "A": """CONTRATOS
-    · Cantidad y detalle de Contratos Activos, Pendientes e Inactivos
-    · Detalle General de Contratos (Activos + Pendientes combinados)
-    · Verificar status del contrato en el sistema  (*)
-    · Identificar motivo del retraso en la aprobación  (*)
-    · Instructivo Gestión de Contratos ACA
-    · Instructivo Gestión de Contratos Medicare
-    · Instructivo Gestión de Contratos Life
-    · Instructivo Gestión de Contratos Supplementary
+    · Cantidad y Detalle de Contratos (incluye status/estado y fecha de aprobación)
+    · Cantidad y Detalle de Contratos Pendientes (incluye motivo del retraso)
+    · Instructivo Gestión de Contratos (Alliant, Ambetter, AmeriHealth, Ascension, Caresource, Humana)
     · Licencias
-    · Oferta de Productos disponibles por carrier y estado
-    · Validación para generación de contrato  (*)""",
+    · Oportunidades de Contratación por Carrier""",
     "B": """PAGOS Y COMISIONES
     · Comisiones Pagadas
     · Comisiones Bloqueadas
     · Detalle Comisiones  (*)
     · Pre-Liquidación de Comisiones
-    · Detalle de Pre-Liquidación  (*)
+    · Detalle de Pre-Liquidación de Comisiones  (*)
     · Frecuencia de Liquidación por Carrier
     · Calendario de Pago de Comisiones a Agentes
-    · Estado del Contrato y Agente por Póliza  (*)
+    · Estado del Contrato y Agente por Póliza
     · Porque no me han pagado mis comisiones  (*)
     · Detalle de Reconciliaciones por Póliza  (*)
-    · Guía de Reconciliaciones de Comisiones""",
+    · Guía de Reconciliaciones de Comisiones
+    · Detalle de Comisiones en Avance  (*)
+    · Bonus Compensation ACA
+    · Override Compensation ACA
+    · Commission Compensation ACA""",
     "C": """DOCUMENTOS NORMATIVOS
     · Plazos Estándar de Envío de Contratos
     · Horarios y Roles del Equipo
@@ -257,9 +246,6 @@ def _mostrar_instrucciones():
        2 — Agente NPN
                Identifíquese con su número NPN.
                Sus consultas se filtran a sus propios datos.
-       3 — Management
-               Acceso sin restricción de filtro.
-               Visualiza datos de toda la organización.
 
   2. CONSULTA EN LENGUAJE NATURAL
      Una vez identificado, escriba su consulta como si
@@ -275,13 +261,10 @@ def _mostrar_instrucciones():
 
   CONTRATOS
     · Cantidad y detalle de Contratos Activos, Pendientes e Inactivos
-    · Detalle General de Contratos (Activos + Pendientes combinados)
-    · Verificar status del contrato en el sistema  (*)
-    · Identificar motivo del retraso en la aprobación  (*)
-    · Instructivo Gestión de Contratos ACA
-    · Instructivo Gestión de Contratos Medicare
-    · Instructivo Gestión de Contratos Life
-    · Instructivo Gestión de Contratos Supplementary
+    · Detalle General de Contratos (Activos + Pendientes + Inactivos)
+    · Verificar status del contrato en el sistema
+    · Identificar motivo del retraso en la aprobación
+    · Instructivo Gestión de Contratos ALLIANT, AMBETTER, AMERIHEALTH, ASCENSION, CARESOURCE, HUMANA
     · Licencias
     · Oferta de Productos disponibles por carrier y estado
     · Validación para generación de contrato  (*)
@@ -305,8 +288,7 @@ def _mostrar_instrucciones():
     · ARC Off-Exchanges FAQ
     · Claro Insurance FAQ
 
-  (*) Estas consultas requieren al menos un filtro
-      obligatorio para ejecutarse (ver tabla de filtros).
+
 
   ══════════════════════════════════════════════════════
   COMANDOS GLOBALES (disponibles en todo momento)
@@ -404,12 +386,24 @@ Tu tarea:
    "usa esto cuando" corresponda mejor a la intención de la consulta. Si ninguno
    corresponde con claridad, indica que no se encontró.
 3. Si no es meta y encontraste un caso de uso, redacta un mensaje breve en español,
-   natural y conversacional, que diga qué entendiste que el usuario quiere consultar
-   (mencionando explícitamente cualquier carrier, estado, fecha, póliza, agencia, NPN u
-   otro dato concreto que el usuario haya escrito en su consulta). Esa explicación SIEMPRE
-   debe terminar EXACTAMENTE con esta línea, sin variarla ni reemplazarla por otra
-   pregunta (ej. NO uses "¿es correcto?", "¿necesitas algún filtro específico?" ni
-   variantes propias):
+   natural y conversacional, que diga qué entendiste que el usuario quiere consultar.
+   Empieza nombrando de forma natural el caso de uso encontrado (parafraseando su
+   "nombre", ej. "Detalle de Contratos" → "el detalle de tu contrato/contratos",
+   "Cantidad de Contratos Pendientes" → "la cantidad de tus contratos pendientes"),
+   y SOLO si el usuario escribió datos concretos en su consulta, continúa con
+   "específicamente..." mencionando explícitamente ese carrier, estado, fecha, póliza,
+   agencia, NPN u otro dato puntual. Si el usuario NO dio ningún dato adicional, no
+   uses "específicamente" — deja el mensaje con solo el nombre del caso de uso, sin
+   sonar redundante. IMPORTANTE: NO inventes ni asumas filtros, estados (ej. "activos",
+   "inactivos", "pendientes") u otros datos que el usuario NO haya escrito
+   explícitamente en su consulta — aunque la descripción "usa esto cuando" del caso de
+   uso mencione palabras como "activos" o algún valor de ejemplo, eso es solo para
+   ayudarte a clasificar la intención, NO son datos confirmados que debas repetirle al
+   usuario. Si el usuario no especificó un filtro, el mensaje debe reflejar la
+   solicitud de forma genérica (ej. "la cantidad total de tus contratos", sin agregar
+   "activos"). Esa explicación SIEMPRE debe terminar EXACTAMENTE con esta línea, sin
+   variarla ni reemplazarla por otra pregunta (ej. NO uses "¿es correcto?", "¿necesitas
+   algún filtro específico?" ni variantes propias):
    "Por favor, confírmame si esto es correcto."
    Si no es meta y no encontraste un caso de uso claro, el mensaje debe decir que no
    pudiste identificar la solicitud y pedir más detalle (en este caso NO uses la línea de
@@ -588,6 +582,39 @@ def _detectar_carrier_rag(
         return carriers[best_idx], best_score
     return None, best_score
 
+
+def _resolver_carrier_rag(
+    user_query: str,
+    carriers_soportados: list[str],
+    umbral: float,
+) -> tuple[str | None, str | None]:
+    """
+    Intenta matchear el carrier de la consulta contra los carriers indexados en la
+    colección (carriers_soportados). Si no matchea ahí, pero la consulta sí menciona
+    un carrier real del catálogo global (FILTROS_VALIDOS["carrier"]) que no está
+    soportado por esta colección, retorna un mensaje de bloqueo — para evitar que el
+    RAG caiga a una búsqueda sin filtro y responda con info de OTRO carrier como si
+    fuera el solicitado. Esta es una red de seguridad determinística: el Agente 1
+    (clasificador de casos de uso) ya intenta rechazar estas consultas vía
+    "usa_esto_cuando", pero no es 100% confiable, así que esto actúa como respaldo.
+    Retorna (carrier_match, mensaje_bloqueo); como máximo uno de los dos es no-None.
+    """
+    carrier_match, _ = _detectar_carrier_rag(user_query, carriers_soportados, umbral)
+    if carrier_match:
+        return carrier_match, None
+
+    carriers_global = FILTROS_VALIDOS.get("carrier", [])
+    carrier_no_soportado, _ = _detectar_carrier_rag(user_query, carriers_global, umbral)
+    if carrier_no_soportado and carrier_no_soportado not in carriers_soportados:
+        mensaje = (
+            f"No tengo información sobre el proceso de contratación con {carrier_no_soportado}. "
+            f"Actualmente solo cuento con instructivos de: {', '.join(sorted(carriers_soportados))}. "
+            "Si deseas consultar este carrier, puedes escalar tu consulta a un humano."
+        )
+        return None, mensaje
+
+    return None, None
+
 # ── Parser de fechas en lenguaje natural ──────────────────────────────────────
 def _parse_fecha_natural(texto: str) -> datetime.date | None:
     """
@@ -719,7 +746,10 @@ def extraer_entidades(
                 r'p[oó]li[zs]a\s+(?:n[úu]m(?:ero)?\.?\s*|#\s*)?([A-Za-z0-9][A-Za-z0-9\-/]*)',
                 texto, re.IGNORECASE
             )
-            if match:
+            # Un número de póliza real siempre tiene al menos un dígito — esto evita
+            # falsos positivos cuando el usuario no da un número (ej. "esta póliza
+            # este mes" capturaría "este" como si fuera el valor de la póliza).
+            if match and any(ch.isdigit() for ch in match.group(1)):
                 valor = match.group(1)
                 sql_snippet = sql_tpl.replace("{v}", valor.replace("'", "''"))
                 detectados[param] = (valor, 1.0, label, sql_snippet)
@@ -815,7 +845,7 @@ def _construir_sql_con_llm(
     entidades: dict,
     texto_usuario: str,
     error_previo: str | None = None,
-    tipo_key: str = "3",
+    tipo_key: str = "1",
 ) -> str:
     """
     Llama a gemini-2.5-pro para construir el SQL final a partir de la plantilla
@@ -879,6 +909,15 @@ def _construir_sql_con_llm(
         "- Si agregas GROUP BY, el campo de agrupación DEBE estar también en el SELECT\n"
         "- El filtro obligatorio del usuario SIEMPRE debe estar en el WHERE\n"
         "- Usa ÚNICAMENTE los nombres de columna de la sección REFERENCIA DE COLUMNAS\n"
+        "- SOLO agrega condiciones WHERE adicionales basadas en la sección ENTIDADES DETECTADAS. "
+        "La REFERENCIA DE COLUMNAS es solo para que sepas qué columnas existen y puedas ampliar el "
+        "SELECT/GROUP BY si el usuario lo pide explícitamente — NO la uses para inferir o inventar "
+        "filtros WHERE a partir de palabras sueltas de la SOLICITUD ESPECÍFICA que coincidan con el "
+        "nombre o la descripción de una columna. Si un concepto de la solicitud (ej. 'pendientes', "
+        "'activos') ya está implícito en el OBJETIVO DE LA CONSULTA o en la sintaxis base, NO agregues "
+        "un filtro adicional para ese concepto a menos que esté explícitamente en ENTIDADES DETECTADAS\n"
+        "- NUNCA uses LIKE, wildcards (%) ni comparaciones parciales para filtrar — usa siempre "
+        "igualdad exacta (=) y únicamente con los valores tal cual aparecen en ENTIDADES DETECTADAS\n"
         "- Responde ÚNICAMENTE con el SQL listo para ejecutar en BigQuery\n"
         "- NO incluyas explicaciones, comentarios, markdown ni backticks\n"
         "- SOLO puedes generar consultas SELECT de solo lectura. "
@@ -912,7 +951,7 @@ def ejecutar_consulta(
     entidades: dict,
     texto_usuario: str,
     query_log=None,
-    tipo_key: str = "3",
+    tipo_key: str = "1",
 ) -> str:
     if pregunta.get("tipo") != "sql" or "sql_by_role" not in pregunta:
         return (
@@ -1052,19 +1091,18 @@ def _aplicar_filtro_agencia(
     pregunta_config: dict,
     base_filter: dict | None,
     agency_name: str | None,
-    tipo_key: str,
 ) -> dict | None:
     """
     Si el caso de uso requiere filtro de agencia, resuelve el valor 'agency' a usar:
-    - Si la agencia autenticada (rol 1/2) está en 'agency_values' (agencias con
+    - Si la agencia autenticada está en 'agency_values' (agencias con
       documento propio para este caso de uso), se usa ese valor exacto.
-    - En cualquier otro caso (incluido Management) se usa "general".
+    - En cualquier otro caso se usa "general".
     """
     if not pregunta_config.get("agency_filter"):
         return base_filter
 
     agencia_filtro = "general"
-    if tipo_key in ("1", "2") and agency_name in pregunta_config.get("agency_values", []):
+    if agency_name in pregunta_config.get("agency_values", []):
         agencia_filtro = agency_name
 
     clausula = {"agency": agencia_filtro}
@@ -1076,7 +1114,7 @@ def ejecutar_rag(
     user_query: str,
     query_log=None,
     agency_name: str | None = None,
-    tipo_key: str = "3",
+    tipo_key: str = "1",
 ) -> str:
     coleccion_nombre = pregunta_config.get("coleccion_chroma", "documentos_normativos")
     carrier_detection = pregunta_config.get("carrier_detection", False)
@@ -1105,14 +1143,16 @@ def ejecutar_rag(
         all_meta = collection.get(include=["metadatas"])
         carriers = list({m["carrier"] for m in all_meta["metadatas"] if "carrier" in m})
         if carriers:
-            carrier_match, carrier_score = _detectar_carrier_rag(user_query, carriers, carrier_umbral)
+            carrier_match, mensaje_bloqueo = _resolver_carrier_rag(user_query, carriers, carrier_umbral)
+            if mensaje_bloqueo:
+                print(mensaje_bloqueo)
+                return mensaje_bloqueo
             if carrier_match:
                 where_filter = {"carrier": carrier_match}
                 if query_log:
                     query_log.rag_carrier = carrier_match
-                #print(f"   Carrier detectado: {carrier_match} (confianza: {carrier_score:.2f})")
 
-    where_filter = _aplicar_filtro_agencia(pregunta_config, where_filter, agency_name, tipo_key)
+    where_filter = _aplicar_filtro_agencia(pregunta_config, where_filter, agency_name)
 
     try:
         results = collection.query(
@@ -1204,7 +1244,7 @@ def _ejecutar_consulta_silenciosa(
     filtro_fijo: str | None,
     entidades: dict,
     texto_usuario: str,
-    tipo_key: str = "3",
+    tipo_key: str = "1",
 ) -> dict:
     """Ejecuta SQL y retorna dict con resultado. No imprime nada en pantalla."""
     result: dict = {"tipo": "sql", "nombre": pregunta["texto"], "sql": None, "tabla": None, "error": None}
@@ -1240,7 +1280,7 @@ def _ejecutar_rag_silenciosa(
     pregunta_config: dict,
     user_query: str,
     agency_name: str | None = None,
-    tipo_key: str = "3",
+    tipo_key: str = "1",
 ) -> dict:
     """Consulta ChromaDB y retorna dict con documentos. No imprime nada en pantalla."""
     result: dict = {"tipo": "rag", "nombre": pregunta_config["texto"], "documentos": [], "error": None}
@@ -1265,11 +1305,14 @@ def _ejecutar_rag_silenciosa(
         all_meta = collection.get(include=["metadatas"])
         carriers = list({m["carrier"] for m in all_meta["metadatas"] if "carrier" in m})
         if carriers:
-            carrier_match, _ = _detectar_carrier_rag(user_query, carriers, carrier_umbral)
+            carrier_match, mensaje_bloqueo = _resolver_carrier_rag(user_query, carriers, carrier_umbral)
+            if mensaje_bloqueo:
+                result["error"] = mensaje_bloqueo
+                return result
             if carrier_match:
                 where_filter = {"carrier": carrier_match}
 
-    where_filter = _aplicar_filtro_agencia(pregunta_config, where_filter, agency_name, tipo_key)
+    where_filter = _aplicar_filtro_agencia(pregunta_config, where_filter, agency_name)
 
     try:
         results = collection.query(
@@ -1357,7 +1400,7 @@ def ejecutar_multiple(
     filtro_fijo_key: str | None,
     user_query: str,
     entidades_previas: dict | None = None,
-    tipo_key: str = "3",
+    tipo_key: str = "1",
     agency_name: str | None = None,
 ) -> str:
     """Ejecuta en paralelo todos los sub-casos declarados en 'invoca' y sintetiza la respuesta."""
@@ -1446,7 +1489,7 @@ def ciclo_consultas(
     catalogos: list[str],
     sql_filtro: str | None,
     filtro_fijo_key: str | None,
-    tipo_key: str = "3",
+    tipo_key: str = "1",
     agency_name: str | None = None,
 ):
     _next_query: str | None = None
