@@ -24,16 +24,18 @@ data/~$*
 # Notes
 notes/
 
+# Words
+
 # OS
 .DS_Store
 Thumbs.db
 desktop.ini
 
 # Claude
-
 .claude/
 
 # Api Experimental
-
 app/
 
+# Docs
+docs/

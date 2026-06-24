@@ -1,15 +1,3 @@
-"""
-Convierte documentos .docx a PDFs optimizados para RAG utilizando Gemini.
-- Extrae texto
-- Interpreta imágenes/diagramas/tablas
-- Convierte diagramas en narrativa operativa
-- Limpia estructura
-- Genera PDF semántico limpio
-
-Uso:
-    python test/format_pdf.py
-"""
-
 import re
 import sys
 from pathlib import Path

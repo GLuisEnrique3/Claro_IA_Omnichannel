@@ -1,19 +1,4 @@
-"""
-Revisa el contenido de:
-    data/use_cases_embeddings.pkl
 
-Muestra:
-- IDs de casos de uso
-- Nombre
-- Tipo
-- Catálogo
-- Tamaño del embedding
-- Preview del vector
-- Semantic examples
-
-Ejecutar:
-    python scripts/revisar_use_case_embeddings.py
-"""
 
 import pickle
 from pathlib import Path
