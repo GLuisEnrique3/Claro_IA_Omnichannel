@@ -49,12 +49,12 @@ def sesion_lista(monkeypatch):
 
 def _mock_agente1(monkeypatch, pregunta: dict | None, *, mensaje: str = "Entiendo que quieres X. ¿Es correcto?",
                   es_meta: bool = False, catalogo: str = "A", entidades: dict | None = None):
-    """Mockea el Agente 1 (clasificación). use_case_entry=None si pregunta es None."""
-    monkeypatch.setattr(cli, "reescribir_consulta", lambda hist, q: q)
+    """Mockea el Agente 1 (reescritura + clasificación fusionadas). use_case_entry=None
+    si pregunta es None. Retorna la 4-tupla nueva (..., query_reescrita)."""
     entry = None if pregunta is None else {"nombre": pregunta["texto"], "pregunta": pregunta, "catalogo": catalogo}
     monkeypatch.setattr(
         cli, "seleccionar_caso_de_uso_llm",
-        lambda query, cats: (entry, mensaje, es_meta),
+        lambda query, cats, historial=None: (entry, mensaje, es_meta, query),
     )
     monkeypatch.setattr(cli, "extraer_entidades", lambda *a, **k: entidades or {})
 
@@ -225,15 +225,18 @@ class TestConfirmacion:
         _mock_agente2(monkeypatch, confirmado=False, query_ajustada="contratos inactivos")
         recibido = {}
 
-        def agente1(query, cats):
+        def agente1(query, cats, historial=None):
             recibido["query"] = query
+            recibido["historial"] = historial
             return ({"nombre": "Contratos Inactivos", "pregunta": PREGUNTA_SQL, "catalogo": "A"},
-                    "Entiendo: Contratos Inactivos. ¿Es correcto?", False)
+                    "Entiendo: Contratos Inactivos. ¿Es correcto?", False, query)
 
         monkeypatch.setattr(cli, "seleccionar_caso_de_uso_llm", agente1)
         resultado = guided_flow.step(sesion_lista, "no, los inactivos")
 
         assert recibido["query"] == "contratos inactivos"
+        # La reclasificación (corrección) NO pasa historial — es autosuficiente.
+        assert recibido["historial"] is None
         assert "Contratos Inactivos" in resultado.texto
         # Sigue en CONFIRM (loop de afinamiento, sin límite de reintentos).
         assert guided_flow.session_store.load(sesion_lista)["state"] == "CONFIRM"
@@ -313,23 +316,26 @@ class TestHistorial:
         assert roles == ["user", "assistant"]
         assert sesion["historial_reciente"][-1]["content"] == "respuesta-asistente"
 
-    def test_rewriter_recibe_ultimas_dos_entradas(self, sesion_lista, monkeypatch):
+    def test_agente1_recibe_historial_de_ultimas_dos_entradas(self, sesion_lista, monkeypatch):
+        # La reescritura está fusionada en el Agente 1: el historial llega como
+        # kwarg a seleccionar_caso_de_uso_llm en la primera clasificación del turno.
         recibido = {}
 
-        def rewriter(historial, query):
-            recibido["historial"] = list(historial)
-            return query
+        def agente1(query, cats, historial=None):
+            recibido["historial"] = list(historial) if historial is not None else None
+            return ({"nombre": "X", "pregunta": PREGUNTA_SQL, "catalogo": "A"},
+                    "¿Es correcto?", False, query)
 
-        _mock_agente1(monkeypatch, PREGUNTA_SQL)
+        monkeypatch.setattr(cli, "seleccionar_caso_de_uso_llm", agente1)
+        monkeypatch.setattr(cli, "extraer_entidades", lambda *a, **k: {})
         _mock_agente2(monkeypatch, confirmado=True)
-        monkeypatch.setattr(cli, "reescribir_consulta", rewriter)
         monkeypatch.setattr(cli, "ejecutar_consulta", lambda *a, **k: "ok")
 
         guided_flow.step(sesion_lista, "contratos activos")
         guided_flow.step(sesion_lista, "sí")
         guided_flow.step(sesion_lista, "y los inactivos")
 
-        # Tras el primer turno hay (user, assistant); el rewriter recibe esas dos.
+        # Tras el primer turno hay (user, assistant); el Agente 1 recibe esas dos.
         assert recibido["historial"] == [
             {"role": "user", "content": "contratos activos"},
             {"role": "assistant", "content": "ok"},

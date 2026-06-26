@@ -38,7 +38,7 @@ _MESES_ES = list(_MESES_NUM.keys())
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from config import llm_model, llm_sql_model, client, FILTROS_VALIDOS, FILTROS_EMBEDDINGS
+from config import llm_model, llm_sql_model, llm_confirm_model, client, FILTROS_VALIDOS, FILTROS_EMBEDDINGS
 from config.logger import get_session, nueva_sesion
 
 # ── Carga de casos de uso ──────────────────────────────────────────────────────
@@ -178,30 +178,30 @@ _TEMAS_POR_CATALOGO = {
     "A": """CONTRATOS
     · Cantidad y Detalle de Contratos (incluye status/estado y fecha de aprobación)
     · Cantidad y Detalle de Contratos Pendientes (incluye motivo del retraso)
-    · Instructivo Gestión de Contratos (Alliant, Ambetter, AmeriHealth, Ascension, Caresource, Humana)
+    · Instructivo Gestión de Contratos (documentos: Humana, Caresource, Ascension, AmeriHealth, Ambetter, Alliant)
     · Licencias
     · Oportunidades de Contratación por Carrier""",
     "B": """PAGOS Y COMISIONES
     · Comisiones Pagadas
     · Comisiones Bloqueadas
-    · Detalle Comisiones  (*)
+    · Detalle Comisiones  
     · Pre-Liquidación de Comisiones
-    · Detalle de Pre-Liquidación de Comisiones  (*)
-    · Frecuencia de Liquidación por Carrier
-    · Calendario de Pago de Comisiones a Agentes
+    · Detalle de Pre-Liquidación de Comisiones  
+    · Frecuencia de Liquidación por Carrier (documento: Calendario Pago de Liquidaciones 2026)
+    · Calendario de Pago de Comisiones a Agentes (documento: Calendario Pago de Comisiones 2026)
     · Estado del Contrato y Agente por Póliza
-    · Porque no me han pagado mis comisiones  (*)
-    · Detalle de Reconciliaciones por Póliza  (*)
-    · Guía de Reconciliaciones de Comisiones
-    · Detalle de Comisiones en Avance  (*)
-    · Bonus Compensation ACA
-    · Override Compensation ACA
-    · Commission Compensation ACA""",
+    · Porque no me han pagado mis comisiones  
+    · Detalle de Reconciliaciones por Póliza  
+    · Guía de Reconciliaciones de Comisiones (documento: Guía de Reconciliaciones de Comisiones)
+    · Detalle de Comisiones en Avance  
+    · Bonus Compensation ACA (documento: 2026 ACA Bonus Compensation)
+    · Override Compensation ACA (documento: 2026 ACA Agency Override, general y por agencia)
+    · Commission Compensation ACA (documento: 2026 ACA Agents Commission)""",
     "C": """DOCUMENTOS NORMATIVOS
-    · Plazos Estándar de Envío de Contratos
-    · Horarios y Roles del Equipo
-    · ARC Off-Exchanges FAQ
-    · Claro Insurance FAQ""",
+    · Plazos Estándar de Envío de Contratos (documento: Envíos de Plazos Estándar de Contratos)
+    · Horarios y Roles del Equipo (documento: Horario y Roles)
+    · ARC Off-Exchanges FAQ (documento: ARC Off-Exchanges FAQ)
+    · Claro Insurance FAQ (documento: Claro Insurance FAQ)""",
 }
 
 
@@ -223,7 +223,7 @@ def _construir_recurso_presentacion(catalogos_permitidos: list) -> str:
         "el resultado con una explicación.\n\n"
         "Temas que el usuario puede consultar:\n\n"
         f"{temas}\n\n"
-        "(*) Estas consultas requieren al menos un filtro obligatorio para ejecutarse."
+        " Estas consultas requieren al menos un filtro obligatorio para ejecutarse."
     )
 
 
@@ -260,33 +260,45 @@ def _mostrar_instrucciones():
   ══════════════════════════════════════════════════════
 
   CONTRATOS
-    · Cantidad y detalle de Contratos Activos, Pendientes e Inactivos
-    · Detalle General de Contratos (Activos + Pendientes + Inactivos)
-    · Verificar status del contrato en el sistema
-    · Identificar motivo del retraso en la aprobación
-    · Instructivo Gestión de Contratos ALLIANT, AMBETTER, AMERIHEALTH, ASCENSION, CARESOURCE, HUMANA
+    · Cantidad y Detalle de Contratos (incluye status/estado y fecha de aprobación)
+    · Cantidad y Detalle de Contratos Pendientes (incluye motivo del retraso)
+    · Instructivo Gestión de Contratos
+        (documentos: Humana, Caresource, Ascension, AmeriHealth, Ambetter, Alliant)
     · Licencias
-    · Oferta de Productos disponibles por carrier y estado
-    · Validación para generación de contrato  (*)
+    · Oportunidades de Contratación por Carrier
 
   PAGOS Y COMISIONES
     · Comisiones Pagadas
     · Comisiones Bloqueadas
-    · Detalle Comisiones  (*)
+    · Detalle Comisiones  
     · Pre-Liquidación de Comisiones
-    · Detalle de Pre-Liquidación  (*)
+    · Detalle de Pre-Liquidación de Comisiones  
     · Frecuencia de Liquidación por Carrier
+        (documento: Calendario Pago de Liquidaciones 2026)
     · Calendario de Pago de Comisiones a Agentes
-    · Estado del Contrato y Agente por Póliza  (*)
-    · Porque no me han pagado mis comisiones  (*)
-    · Detalle de Reconciliaciones por Póliza  (*)
+        (documento: Calendario Pago de Comisiones 2026)
+    · Estado del Contrato y Agente por Póliza
+    · Porque no me han pagado mis comisiones  
+    · Detalle de Reconciliaciones por Póliza  
     · Guía de Reconciliaciones de Comisiones
+        (documento: Guía de Reconciliaciones de Comisiones)
+    · Detalle de Comisiones en Avance  
+    · Bonus Compensation ACA
+        (documento: 2026 ACA Bonus Compensation)
+    · Override Compensation ACA
+        (documento: 2026 ACA Agency Override, general y por agencia)
+    · Commission Compensation ACA
+        (documento: 2026 ACA Agents Commission)
 
   DOCUMENTOS NORMATIVOS
     · Plazos Estándar de Envío de Contratos
+        (documento: Envíos de Plazos Estándar de Contratos)
     · Horarios y Roles del Equipo
+        (documento: Horario y Roles)
     · ARC Off-Exchanges FAQ
+        (documento: ARC Off-Exchanges FAQ)
     · Claro Insurance FAQ
+        (documento: Claro Insurance FAQ)
 
 
 
@@ -300,43 +312,6 @@ def _mostrar_instrucciones():
   nueva sesión                 — reinicia la identificación
 """)
     _sep()
-
-
-_PROMPT_REESCRIBIR = """Eres un asistente de un sistema de seguros (Claro Insurance).
-Tu única tarea es decidir si la nueva consulta del usuario necesita contexto del historial para entenderse.
-
-REGLAS (en orden de prioridad):
-1. Si la consulta menciona explícitamente "por carrier", "todos los carriers", "por estado", "todos los agentes" u otra expresión de alcance general → devuélvela EXACTAMENTE igual, sin ningún cambio. Estas expresiones indican que el usuario NO quiere filtrar por entidades del historial.
-2. Si la consulta es COMPLETA y tiene sentido por sí sola, o claramente cambia de tema → devuélvela EXACTAMENTE igual, sin ningún cambio.
-3. Si la consulta es AMBIGUA, INCOMPLETA o es una extensión directa del turno anterior (añade un filtro, aclara algo, pregunta sobre lo mismo con un nuevo parámetro) → reescríbela incorporando el contexto mínimo necesario del historial.
-
-IMPORTANTE: Ante la duda, NO reescribas. Es mejor devolver la consulta original que añadir contexto incorrecto.
-
-Historial reciente:
-{historial}
-
-Nueva consulta: "{query}"
-
-Responde ÚNICAMENTE con la consulta final. Sin explicaciones ni comillas.""".strip()
-
-
-def reescribir_consulta(historial: list[dict], query: str) -> str:
-    """Reformula la consulta si es una continuación del turno anterior."""
-    if not historial:
-        return query
-    lineas = []
-    for msg in historial:
-        rol = "Usuario" if msg["role"] == "user" else "Asistente"
-        contenido = msg["content"][:200].replace("\n", " ")
-        lineas.append(f'{rol}: "{contenido}"')
-    historial_str = "\n".join(lineas)
-    try:
-        prompt = _PROMPT_REESCRIBIR.format(historial=historial_str, query=query)
-        response = _llm_call(llm_model, prompt)
-        reescrita = response.text.strip().strip('"').split("\n")[0].strip()
-        return reescrita if reescrita else query
-    except Exception:
-        return query
 
 
 def _extraer_json(texto: str) -> dict:
@@ -356,9 +331,31 @@ descripción de "usa esto cuando" que indica exactamente en qué situación apli
 
 {lista_casos}
 
-Consulta del usuario: "{query}"
+Historial reciente de la conversación (puede estar vacío si es el primer turno):
+{historial}
+
+Nueva consulta del usuario: "{query}"
 
 Tu tarea:
+0. PASO PREVIO — Reescritura de contexto: antes de clasificar, decidí si la "Nueva
+   consulta" necesita contexto del historial para entenderse. Reglas (en orden de
+   prioridad):
+   a. Si la consulta menciona explícitamente "por carrier", "todos los carriers", "por
+      estado", "todos los agentes" u otra expresión de alcance general → usala
+      EXACTAMENTE igual, sin ningún cambio. Esas expresiones indican que el usuario NO
+      quiere heredar filtros del historial.
+   b. Si la consulta es COMPLETA y tiene sentido por sí sola, o claramente cambia de
+      tema → usala EXACTAMENTE igual, sin ningún cambio.
+   c. Si la consulta es AMBIGUA, INCOMPLETA o es una extensión directa del turno
+      anterior (añade un filtro, aclara algo, pregunta sobre lo mismo con un nuevo
+      parámetro) → reescribila incorporando el contexto mínimo necesario del historial.
+   IMPORTANTE: ante la duda, NO reescribas — es mejor usar la consulta original que
+   añadir contexto incorrecto (ej. no arrastres un carrier/NPN/póliza de un turno
+   anterior si la nueva consulta ya menciona su propio carrier/NPN/póliza explícito,
+   aunque el turno anterior haya sido sobre otro tema). El resultado de este paso es
+   "query_reescrita", y es la versión que debés usar para TODOS los pasos siguientes
+   (clasificación, detección de meta, redacción del mensaje de confirmación) — no la
+   consulta cruda.
 1. Primero decide si la consulta es una pregunta CONVERSACIONAL/META sobre el propio
    asistente (ej. "quién eres", "qué eres", "qué puedes hacer", "cómo funcionas", "para
    qué sirves", "ayúdame", "no sé cómo preguntar", "dame instrucciones", "qué temas puedo
@@ -366,13 +363,16 @@ Tu tarea:
    RECURSO DE PRESENTACIÓN de arriba para construir tu respuesta — resúmelo o cita los
    temas más relevantes a lo que preguntó, en vez de inventar una respuesta genérica fuera
    de ese recurso. Reglas para redactar "mensaje_confirmacion" en este caso:
-   - NO empieces siempre con "Soy el/tu asistente de Claro Insurance" ni ninguna frase fija
+   - NO empieces con "Soy el/tu asistente de Claro Insurance" ni ninguna frase fija
      de apertura.
    - Si la consulta pregunta específicamente por tu identidad ("quién eres", "qué eres"),
      ahí sí podés presentarte brevemente, una sola vez.
    - Si la consulta ya pide algo concreto (ej. "qué temas puedo consultar", "dame
-     instrucciones", "cómo pregunto"), ve DIRECTO al contenido pedido (lista de temas o
-     ejemplos del recurso) sin reintroducirte ni repetir quién eres.
+     instrucciones", "cómo pregunto", "qué puedes hacer", "en qué me puedes ayudar",
+     "cómo funcionas"), ve DIRECTO al contenido pedido (lista de temas o ejemplos del
+     recurso) sin reintroducirte ni repetir quién eres ni decir "Soy el/tu asistente de
+     Claro Insurance" — estas son preguntas sobre capacidades/funcionalidad, NO sobre
+     identidad, así que no requieren presentación.
    - Si el usuario indica que ya está confundido o insiste en no saber cómo formular su
      pregunta, sé más concreto citando 2 o 3 temas puntuales del recurso en vez de repetir
      una explicación general.
@@ -387,6 +387,7 @@ Tu tarea:
    corresponde con claridad, indica que no se encontró.
 3. Si no es meta y encontraste un caso de uso, redacta un mensaje breve en español,
    natural y conversacional, que diga qué entendiste que el usuario quiere consultar.
+   NO comiences con un saludo genérico (ej. "Hola", "¡Hola!") — ve directo al mensaje.
    Empieza nombrando de forma natural el caso de uso encontrado (parafraseando su
    "nombre", ej. "Detalle de Contratos" → "el detalle de tu contrato/contratos",
    "Cantidad de Contratos Pendientes" → "la cantidad de tus contratos pendientes"),
@@ -406,11 +407,12 @@ Tu tarea:
    algún filtro específico?" ni variantes propias):
    "Por favor, confírmame si esto es correcto."
    Si no es meta y no encontraste un caso de uso claro, el mensaje debe decir que no
-   pudiste identificar la solicitud y pedir más detalle (en este caso NO uses la línea de
+   pudiste identificar la solicitud y pedir más detalle (sin saludo genérico tampoco
+   acá; en este caso NO uses la línea de
    confirmación anterior, ya que no hay nada que confirmar).
 
 Responde ÚNICAMENTE con un JSON válido, sin markdown ni explicaciones, con este formato exacto:
-{{"es_meta_conversacional": true_o_false, "encontrado": true_o_false, "catalogo": "A_o_B_o_C_o_null", "id": "id_o_null", "mensaje_confirmacion": "mensaje"}}""".strip()
+{{"query_reescrita": "texto", "es_meta_conversacional": true_o_false, "encontrado": true_o_false, "catalogo": "A_o_B_o_C_o_null", "id": "id_o_null", "mensaje_confirmacion": "mensaje"}}""".strip()
 
 _MENSAJE_SIN_CASO_DEFAULT = (
     "No logro identificar con claridad qué necesitas. "
@@ -421,17 +423,21 @@ _MENSAJE_SIN_CASO_DEFAULT = (
 def seleccionar_caso_de_uso_llm(
     query: str,
     catalogos_permitidos: list,
-) -> tuple[dict | None, str, bool]:
+    historial: list[dict] | None = None,
+) -> tuple[dict | None, str, bool, str]:
     """
-    Agente 1: clasifica la consulta del usuario contra los casos de uso permitidos
-    usando su descripción "usa_esto_cuando", y redacta el mensaje de confirmación.
-    El LLM redacta el mensaje leyendo directamente la consulta (no se le pasan
-    entidades pre-extraídas, ya que esas dependen del caso de uso que aún no se conoce).
-    Retorna (use_case_entry, mensaje_confirmacion, es_meta_conversacional).
+    Agente 1: en una sola llamada, (0) reescribe la consulta usando el historial si
+    es necesario, (1) clasifica la consulta resultante contra los casos de uso
+    permitidos usando su descripción "usa_esto_cuando", y (2) redacta el mensaje de
+    confirmación. El LLM redacta el mensaje leyendo directamente la consulta (no se
+    le pasan entidades pre-extraídas, ya que esas dependen del caso de uso que aún no
+    se conoce).
+    Retorna (use_case_entry, mensaje_confirmacion, es_meta_conversacional, query_reescrita).
     use_case_entry es None si no se identificó un caso de uso claro, si el LLM devolvió
     un id inexistente, o si la consulta es conversacional/meta sobre el propio asistente
     (en ese caso es_meta_conversacional es True y mensaje_confirmacion ya es la respuesta
-    final, no una pregunta de confirmación).
+    final, no una pregunta de confirmación). query_reescrita es la consulta original si
+    no hubo historial o no hizo falta reescribirla.
     """
     candidatos_lineas = []
     for catalogo_key in catalogos_permitidos:
@@ -445,15 +451,28 @@ def seleccionar_caso_de_uso_llm(
     lista_casos = "\n".join(candidatos_lineas) if candidatos_lineas else "(sin casos de uso disponibles)"
     recurso_presentacion = _construir_recurso_presentacion(catalogos_permitidos)
 
+    if historial:
+        lineas_hist = []
+        for msg in historial:
+            rol = "Usuario" if msg["role"] == "user" else "Asistente"
+            contenido = msg["content"][:200].replace("\n", " ")
+            lineas_hist.append(f'{rol}: "{contenido}"')
+        historial_str = "\n".join(lineas_hist)
+    else:
+        historial_str = "(sin historial — primer turno)"
+
     prompt = _PROMPT_SELECCIONAR_CASO_USO.format(
-        recurso_presentacion=recurso_presentacion, lista_casos=lista_casos, query=query
+        recurso_presentacion=recurso_presentacion, lista_casos=lista_casos,
+        historial=historial_str, query=query,
     )
 
     try:
         response = _llm_call(llm_model, prompt)
         resultado = _extraer_json(response.text)
     except Exception:
-        return None, _MENSAJE_SIN_CASO_DEFAULT, False
+        return None, _MENSAJE_SIN_CASO_DEFAULT, False, query
+
+    query_reescrita = resultado.get("query_reescrita") or query
 
     es_meta = bool(resultado.get("es_meta_conversacional", False))
     if es_meta:
@@ -461,10 +480,10 @@ def seleccionar_caso_de_uso_llm(
             "¡Hola! Soy el asistente de Claro Insurance. Puedo ayudarte con consultas sobre "
             "contratos, comisiones/pagos y documentos normativos. ¿Qué te gustaría consultar?"
         )
-        return None, mensaje, True
+        return None, mensaje, True, query_reescrita
 
     if not resultado.get("encontrado"):
-        return None, resultado.get("mensaje_confirmacion") or _MENSAJE_SIN_CASO_DEFAULT, False
+        return None, resultado.get("mensaje_confirmacion") or _MENSAJE_SIN_CASO_DEFAULT, False, query_reescrita
 
     catalogo_key = resultado.get("catalogo")
     uc_id = resultado.get("id")
@@ -474,11 +493,11 @@ def seleccionar_caso_de_uso_llm(
 
     if pregunta is None:
         # El LLM "alucinó" un catalogo/id inexistente — se trata como no encontrado.
-        return None, _MENSAJE_SIN_CASO_DEFAULT, False
+        return None, _MENSAJE_SIN_CASO_DEFAULT, False, query_reescrita
 
     use_case_entry = {"nombre": pregunta["texto"], "pregunta": pregunta, "catalogo": catalogo_key}
     mensaje = resultado.get("mensaje_confirmacion") or f'Entiendo que quieres consultar: {pregunta["texto"]}. ¿Es correcto?'
-    return use_case_entry, mensaje, False
+    return use_case_entry, mensaje, False, query_reescrita
 
 
 _PROMPT_INTERPRETAR_CONFIRMACION = """Eres un asistente que interpreta si un usuario confirmó o no una propuesta.
@@ -508,7 +527,7 @@ def _interpretar_confirmacion(mensaje_confirmacion: str, respuesta_usuario: str)
         mensaje_confirmacion=mensaje_confirmacion, respuesta_usuario=respuesta_usuario
     )
     try:
-        response = _llm_call(llm_model, prompt)
+        response = _llm_call(llm_confirm_model, prompt)
         resultado = _extraer_json(response.text)
         return {
             "confirmado": bool(resultado.get("confirmado", False)),
@@ -855,6 +874,7 @@ def _construir_sql_con_llm(
     # El filtro fijo se inyecta directamente en el SQL base para garantizar
     # que siempre esté presente, independientemente de lo que genere el LLM.
     sql_base = pregunta["sql_by_role"][tipo_key].replace("{dynamic_filters}", filtro_fijo or "").strip()
+
     descripciones = pregunta.get("descripciones", {})
 
     entidades_lines = []
@@ -1029,7 +1049,7 @@ def ejecutar_consulta(
         if not rows:
             return "No se encontraron resultados para su consulta."
 
-        _MAX_FILAS_PROMPT = 80
+        _MAX_FILAS_PROMPT = 50
         filas_truncadas = len(rows) > _MAX_FILAS_PROMPT
         tabla = _formatear_filas(rows[:_MAX_FILAS_PROMPT])
         aviso_truncado = (
@@ -1048,7 +1068,8 @@ def ejecutar_consulta(
             f"El usuario solicitó: \"{solicitud_display}\".\n\n"
             f"Datos obtenidos de la base de datos:\n{tabla}{aviso_truncado}\n\n"
             f"INSTRUCCIONES DE RESPUESTA:\n"
-            f"- Saluda brevemente e informa el resultado de forma directa y profesional.\n"
+            f"- NO comiences con un saludo genérico (ej. 'Hola', '¡Hola!'). Ve directo al "
+            f"resultado de forma profesional, sin frase de apertura fija.\n"
             f"- Si los datos tienen UNA sola fila con totales o conteos globales: preséntala como un número resumen.\n"
             f"- Si los datos tienen MÚLTIPLES filas agrupadas (por carrier, agencia, estado, etc.): "
             f"muestra CADA fila con su categoría y valor, en formato de lista o tabla simple. "
@@ -1214,6 +1235,7 @@ def ejecutar_rag(
         f"Basándote ÚNICAMENTE en los siguientes fragmentos de documentos:\n\n"
         f"{contexto_completo}\n\n"
         f"Responde directamente la pregunta en español de forma clara y concisa. "
+        f"NO comiences con un saludo genérico (ej. 'Hola', '¡Hola!') — ve directo a la respuesta. "
         f"Tutea siempre al usuario, usa 'tú' en lugar de 'usted'. "
         f"Si la información no está en los documentos, indícalo. "
         f"NO uses cierres formales como 'Atentamente' ni firmas. "
@@ -1375,6 +1397,7 @@ def _sintetizar_respuestas_multiples(
         f"Aquí están los resultados:\n\n"
         f"{contexto}\n\n"
         f"INSTRUCCIONES GENERALES:\n"
+        f"- NO comiences con un saludo genérico (ej. 'Hola', '¡Hola!') — ve directo a la respuesta.\n"
         f"- Sintetiza TODA la información en UNA SOLA respuesta clara, directa y en español.\n"
         f"- No repitas los encabezados de sección (---).\n"
         f"- Usa la descripción de columnas para interpretar correctamente cada valor de la tabla.\n"
@@ -1514,29 +1537,39 @@ def ciclo_consultas(
         print()
         print("  Analizando su consulta...")
 
-        # Pasa el último intercambio (pregunta + respuesta real) al rewriter para
-        # que pueda heredar filtros mencionados antes (ej. estado, línea de negocio).
-        # La Regla 2 del prompt ya deja la query intacta si está completa por sí sola.
-        user_query_efectiva = reescribir_consulta(_historial_reciente[-2:], user_query)
-        #if user_query_efectiva != user_query:
-            #print(f"  #--DEBUG Consulta reescrita: {user_query_efectiva}")
-
         # ── Agente 1 + Agente 2: identificación del caso de uso y confirmación ────
-        # Itera indefinidamente, afinando la clasificación con cada respuesta del
-        # usuario, hasta que confirme explícitamente un caso de uso. No hay límite
-        # de reintentos: el usuario sale del loop solo confirmando, o con un
-        # comando global (salir, volver, nueva sesión), manejado por _input().
-        query_clasificar = user_query_efectiva
+        # El Agente 1 reescribe la consulta usando el último intercambio (pregunta +
+        # respuesta real) en la misma llamada en que clasifica — solo en el primer
+        # intento de cada turno; el historial entre turnos ya no aplica en los
+        # reintentos de confirmación dentro del mismo turno (ahí la "query_ajustada"
+        # ya es autosuficiente). Itera indefinidamente, afinando la clasificación con
+        # cada respuesta del usuario, hasta que confirme explícitamente un caso de
+        # uso. No hay límite de reintentos: el usuario sale del loop solo
+        # confirmando, o con un comando global (salir, volver, nueva sesión),
+        # manejado por _input().
+        query_clasificar = user_query
+        user_query_efectiva = user_query
         intentos_confirmacion = 0
+        primera_iteracion = True
 
         es_turno_meta = False
 
         while True:
+            historial_para_llm = _historial_reciente[-2:] if primera_iteracion else None
             _t = time.perf_counter()
-            use_case_entry, mensaje_confirmacion, es_meta = seleccionar_caso_de_uso_llm(query_clasificar, catalogos)
+            use_case_entry, mensaje_confirmacion, es_meta, query_reescrita = seleccionar_caso_de_uso_llm(
+                query_clasificar, catalogos, historial=historial_para_llm
+            )
             q.latencia_deteccion_ms = int((time.perf_counter() - _t) * 1000)
             q.caso_exitoso = use_case_entry is not None
             q.confirmacion_mensaje = mensaje_confirmacion
+
+            # Siempre se actualiza con el resultado más reciente — si el usuario corrige
+            # o aclara durante el loop de confirmación, esa corrección debe reflejarse
+            # en la extracción de entidades de más abajo, no quedarse con la primera
+            # interpretación del turno.
+            user_query_efectiva = query_reescrita
+            primera_iteracion = False
 
             if use_case_entry is not None:
                 q.caso_nombre = use_case_entry["nombre"]
@@ -1611,7 +1644,7 @@ def ciclo_consultas(
             for sp in sub_pqs:
                 if sp.get("tipo") == "sql" and sp.get("parametros"):
                     entidades_por_subcaso[sp["texto"]] = extraer_entidades(
-                        user_query, sp["parametros"], filtro_fijo_key
+                        user_query_efectiva, sp["parametros"], filtro_fijo_key
                     )
             #print()
             #for nombre_sp, ents in entidades_por_subcaso.items():
@@ -1669,18 +1702,18 @@ def ciclo_consultas(
                 print()
                 print("  Procesando su consulta, por favor espere...")
                 respuesta_mostrada = ejecutar_multiple(
-                    pregunta, use_case_entry["catalogo"], sql_filtro, filtro_fijo_key, user_query,
+                    pregunta, use_case_entry["catalogo"], sql_filtro, filtro_fijo_key, user_query_efectiva,
                     entidades_previas, tipo_key=tipo_key, agency_name=agency_name,
                 )
             elif tipo_pregunta == "rag":
                 respuesta_mostrada = ejecutar_rag(
-                    pregunta, user_query, query_log=q, agency_name=agency_name, tipo_key=tipo_key
+                    pregunta, user_query_efectiva, query_log=q, agency_name=agency_name, tipo_key=tipo_key
                 )
             else:
                 print()
                 print("  Procesando su consulta, por favor espere...")
                 respuesta_mostrada = ejecutar_consulta(
-                    pregunta, sql_filtro, entidades_previas, user_query, query_log=q, tipo_key=tipo_key
+                    pregunta, sql_filtro, entidades_previas, user_query_efectiva, query_log=q, tipo_key=tipo_key
                 )
                 print()
                 print("RESULTADO:")

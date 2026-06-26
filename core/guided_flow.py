@@ -550,8 +550,8 @@ def _handle_reformular(session_key: str, session: dict, texto: str) -> FlowResul
 
 def _pipeline_consulta(session_key: str, session: dict, user_query: str) -> FlowResult:
     """
-    Réplica de una iteración de ciclo_consultas: reescribe la consulta y la
-    clasifica con el Agente 1, dejando la sesión en CONFIRM (o respondiendo
+    Primera clasificación de un turno: el Agente 1 reescribe (usando el historial)
+    y clasifica en una sola llamada, dejando la sesión en CONFIRM (o respondiendo
     directo si es una pregunta meta-conversacional).
     """
     logger = _get_logger(session_key)
@@ -560,36 +560,36 @@ def _pipeline_consulta(session_key: str, session: dict, user_query: str) -> Flow
 
     bloques: list[Bloque] = [Bloque("status", "\n  Analizando su consulta...")]
 
-    # El rewriter consume el último intercambio (pregunta + respuesta real). La
-    # Regla 2 del prompt deja la query intacta si es completa por sí sola — no
-    # hay atajo por longitud (alineado con el nuevo ciclo_consultas).
-    historial = _historial_dicts(session)
-    user_query_efectiva = cli.reescribir_consulta(historial[-2:], user_query)
-    q.query_reescrita = user_query_efectiva
-
-    return _proponer_caso(session_key, session, q, user_query_efectiva, user_query_efectiva, bloques)
+    # El Agente 1 fusiona reescritura + clasificación en una sola llamada. El
+    # historial solo se pasa en la primera clasificación del turno; las
+    # correcciones posteriores (loop de confirmación) ya son autosuficientes.
+    historial = _historial_dicts(session)[-2:]
+    return _proponer_caso(session_key, session, q, user_query, bloques, historial=historial)
 
 
 def _proponer_caso(
     session_key: str,
     session: dict,
     q,
-    query_clasificar: str,
-    user_query_efectiva: str,
+    query: str,
     bloques: list[Bloque] | None = None,
+    historial: list[dict] | None = None,
 ) -> FlowResult:
     """
-    Agente 1: clasifica `query_clasificar`, fija los campos de tracking y deja
-    la sesión en CONFIRM con el mensaje de confirmación. Si el Agente 1 detecta
-    una pregunta meta-conversacional, responde directo y vuelve a QUERY.
+    Agente 1: en una sola llamada reescribe `query` (con `historial` si se pasa)
+    y la clasifica, fija los campos de tracking y deja la sesión en CONFIRM con
+    el mensaje de confirmación. Si detecta una pregunta meta-conversacional,
+    responde directo y vuelve a QUERY. Devuelve además la `query_reescrita`, que
+    se usa como consulta efectiva para la ejecución.
     """
     bloques = bloques or []
 
     _t = time.perf_counter()
-    use_case_entry, mensaje_confirmacion, es_meta = cli.seleccionar_caso_de_uso_llm(
-        query_clasificar, session["catalogos"]
+    use_case_entry, mensaje_confirmacion, es_meta, query_reescrita = cli.seleccionar_caso_de_uso_llm(
+        query, session["catalogos"], historial=historial
     )
     q.latencia_deteccion_ms = int((time.perf_counter() - _t) * 1000)
+    q.query_reescrita = query_reescrita
     q.caso_exitoso = use_case_entry is not None
     q.confirmacion_mensaje = mensaje_confirmacion
 
@@ -601,7 +601,7 @@ def _proponer_caso(
         # Pregunta conversacional sobre el propio asistente: el mensaje ya es la
         # respuesta final, no hay nada que confirmar ni ejecutar. Se registra en
         # el historial y se vuelve a pedir una consulta (como el `continue` del CLI).
-        _registrar_turno(session, user_query_efectiva, mensaje_confirmacion)
+        _registrar_turno(session, query_reescrita, mensaje_confirmacion)
         _get_logger(session_key).cerrar_consulta()
         session["state"] = "QUERY"
         bloques.append(Bloque("meta", "\n  " + mensaje_confirmacion))
@@ -612,8 +612,7 @@ def _proponer_caso(
     session["pendiente"] = {
         "use_case_entry": use_case_entry,
         "mensaje": mensaje_confirmacion,
-        "user_query_efectiva": user_query_efectiva,
-        "query_clasificar": query_clasificar,
+        "user_query_efectiva": query_reescrita,
         "intentos": q.intentos_confirmacion,
     }
     bloques.append(_bloque_confirmacion(mensaje_confirmacion, use_case_entry))
@@ -652,9 +651,9 @@ def _handle_confirm(session_key: str, session: dict, texto: str) -> FlowResult:
         return _ejecutar_pendiente(session_key, session)
 
     # No confirmó (o no había caso): reclasifica con el ajuste sugerido o, si no
-    # hay, con su respuesta libre.
+    # hay, con su respuesta libre. Sin historial: la corrección es autosuficiente.
     query_clasificar = interpretacion["query_ajustada"] or respuesta_usuario
-    return _proponer_caso(session_key, session, q, query_clasificar, query_clasificar)
+    return _proponer_caso(session_key, session, q, query_clasificar)
 
 
 def _ejecutar_pendiente(session_key: str, session: dict) -> FlowResult:
