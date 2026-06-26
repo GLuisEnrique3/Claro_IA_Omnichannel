@@ -54,10 +54,6 @@ instalar_proxy()
 
 _SEP = "━" * 55
 
-# Texto que envía el botón rápido de confirmación. El Agente 2 lo interpreta
-# como confirmación afirmativa; el usuario también puede escribir libremente.
-CONFIRMAR_SENTINEL = "Sí, es correcto"
-
 # Ventana del historial conversacional. El rewriter del CLI consume las dos
 # últimas entradas (pregunta + respuesta real); aquí se conservan más turnos
 # por canal, pero al rewriter solo se le pasan las dos últimas.
@@ -136,14 +132,12 @@ def _bloque_menu_consulta() -> Bloque:
 
 _PROMPT_OTRA = "¿Hay algo más en lo que pueda ayudarte? "
 
-_BOTON_CONFIRMAR = [("✅ Sí, es correcto", CONFIRMAR_SENTINEL)]
-
 
 def _bloque_confirmacion(mensaje: str, use_case_entry: dict | None) -> Bloque:
     """
-    Bloque con el mensaje de confirmación que redactó el Agente 1. `data`
-    indica si hay un caso de uso propuesto (para que el canal decida si mostrar
-    el botón de confirmación rápida).
+    Bloque con el mensaje de confirmación que redactó el Agente 1. La
+    confirmación es en lenguaje libre (sin botones): el usuario responde con
+    texto y el Agente 2 lo interpreta.
     """
     return Bloque(
         "confirmar_prompt",
@@ -165,9 +159,7 @@ def _prompt_actual(session: dict) -> tuple[list[Bloque], list[tuple[str, str]] |
     if estado == "CONFIRM":
         pendiente = session.get("pendiente") or {}
         mensaje = pendiente.get("mensaje", "")
-        tiene_caso = pendiente.get("use_case_entry") is not None
-        botones = _BOTON_CONFIRMAR if tiene_caso else None
-        return [_bloque_confirmacion(mensaje, pendiente.get("use_case_entry"))], botones
+        return [_bloque_confirmacion(mensaje, pendiente.get("use_case_entry"))], None
     if estado == "OTRA":
         return [Bloque("otra_prompt", _PROMPT_OTRA)], None
     return [], None
@@ -624,9 +616,8 @@ def _proponer_caso(
         "query_clasificar": query_clasificar,
         "intentos": q.intentos_confirmacion,
     }
-    botones = _BOTON_CONFIRMAR if use_case_entry is not None else None
     bloques.append(_bloque_confirmacion(mensaje_confirmacion, use_case_entry))
-    return FlowResult(bloques=bloques, botones=botones)
+    return FlowResult(bloques=bloques)
 
 
 def _handle_confirm(session_key: str, session: dict, texto: str) -> FlowResult:
@@ -645,10 +636,8 @@ def _handle_confirm(session_key: str, session: dict, texto: str) -> FlowResult:
     if not respuesta_usuario:
         # Vuelve a mostrar la misma propuesta y pide respuesta de nuevo (como el CLI).
         use_case_entry = pendiente.get("use_case_entry")
-        botones = _BOTON_CONFIRMAR if use_case_entry is not None else None
         return FlowResult(
             bloques=[_bloque_confirmacion(pendiente["mensaje"], use_case_entry)],
-            botones=botones,
         )
 
     logger = _get_logger(session_key)

@@ -134,7 +134,8 @@ class TestPipelineConsulta:
         assert "  Analizando su consulta..." in resultado.lineas
         # El mensaje de confirmación lo redacta el Agente 1 (lenguaje natural).
         assert any("¿Es correcto?" in l for l in resultado.lineas)
-        assert resultado.botones == guided_flow._BOTON_CONFIRMAR
+        # Confirmación en lenguaje libre: sin botones.
+        assert resultado.botones is None
         session = guided_flow.session_store.load(sesion_lista)
         assert session["state"] == "CONFIRM"
 
@@ -194,13 +195,14 @@ class TestConfirmacion:
         assert "Tienes 42 contratos activos." in resultado.lineas
         assert resultado.lineas[-1] == guided_flow._PROMPT_OTRA
 
-    def test_boton_confirmar_ejecuta(self, sesion_lista, monkeypatch):
+    def test_confirmacion_texto_libre_ejecuta(self, sesion_lista, monkeypatch):
         self._hasta_confirmacion(sesion_lista, monkeypatch)
         _mock_agente2(monkeypatch, confirmado=True)
         monkeypatch.setattr(cli, "ejecutar_consulta", lambda *a, **k: "ok")
-        # El botón rápido envía el sentinel afirmativo.
-        resultado = guided_flow.step(sesion_lista, guided_flow.CONFIRMAR_SENTINEL)
+        # Confirmación en lenguaje libre (sin botón): el Agente 2 la interpreta.
+        resultado = guided_flow.step(sesion_lista, "sí, es correcto")
         assert "ok" in resultado.texto
+        assert resultado.botones is None
         assert guided_flow.session_store.load(sesion_lista)["state"] == "OTRA"
 
     def test_prints_internos_se_capturan(self, sesion_lista, monkeypatch):
