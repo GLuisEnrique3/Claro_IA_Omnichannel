@@ -20,8 +20,9 @@ vertexai.init(
     credentials=_credentials,
 )
 
-llm_model     = GenerativeModel("gemini-2.5-flash") 
-llm_sql_model = GenerativeModel("gemini-2.5-pro")         # construcción de SQL
+llm_model         = GenerativeModel("gemini-2.5-flash")
+llm_sql_model     = GenerativeModel("gemini-2.5-pro")         # construcción de SQL
+llm_confirm_model = GenerativeModel("gemini-2.5-flash-lite")  # interpretación de confirmación (Agente 2)
 
 #---- Consultas BigQuery ----#
 os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = os.getenv("BQ_CREDENTIALS_JSON")
