@@ -109,6 +109,12 @@ PARAM_TO_FILTRO = {
     "l.Disposition__c":   ("license_disposition", "Disposición",        "AND l.Disposition__c = '{v}'",                         0.80),
     "l.SubDisposition__c":("license_sub_disposition","Sub-Disposición", "AND l.SubDisposition__c = '{v}'",                     0.80),
     "l.Source__c":        ("license_source",      "Fuente (Interna/NIPR)", "AND l.Source__c = '{v}'",                           0.85),
+    "nl.LicenseClassName__c": ("license_class",            "Clase de Licencia",   "AND nl.LicenseClassName__c = '{v}'",        0.80),
+    "nl.LineOfAuthority__c":  ("license_line_of_authority", "Línea de Autoridad", "AND nl.LineOfAuthority__c = '{v}'",         0.80),
+    # Fechas de licencia — filtro_key propio activa el parser de lenguaje natural solo si el usuario menciona activación/expiración
+    "l.LicenseActivationDate__c": ("__license_activation_date__", "Fecha de Activación de Licencia", "AND DATE_TRUNC(DATE(l.LicenseActivationDate__c), MONTH) = DATE '{v}'", None),
+    "l.LicenseExpirationDate__c": ("__license_expiration_date__", "Fecha de Expiración de Licencia", "AND DATE_TRUNC(DATE(l.LicenseExpirationDate__c), MONTH) = DATE '{v}'", None),
+    "l.DateUpdated__c":           ("__license_date_updated__",    "Fecha de Actualización de Licencia", "AND DATE_TRUNC(DATE(l.DateUpdated__c), MONTH) = DATE '{v}'",           None),
 }
 _MAX_REINTENTOS_SQL = 2   # intentos máximos de construcción SQL con LLM
 
@@ -737,6 +743,45 @@ def extraer_entidades(
         if filtro_key == "__commission_month__":
             _KW_COMMISSION_MONTH = r'commission[\s_-]*month|mes\s+de\s+comisi[oó]n(?:es)?'
             if re.search(_KW_COMMISSION_MONTH, texto, re.IGNORECASE):
+                fecha = _parse_fecha_natural(texto)
+                if fecha:
+                    val_str = fecha.strftime("%Y-%m-%d")
+                    label_fecha = f"{_MESES_ES[fecha.month - 1].capitalize()} {fecha.year}"
+                    sql_snippet = sql_tpl.replace("{v}", val_str)
+                    detectados[param] = (label_fecha, 1.0, label, sql_snippet)
+            continue
+        # ─────────────────────────────────────────────────────────────────────
+
+        # ── Rama fecha de activación de licencia: solo si el usuario la menciona ──
+        if filtro_key == "__license_activation_date__":
+            _KW_LICENSE_ACTIVATION = r'activaci[oó]n|activad[ao]|activa\s+desde|fecha\s+de\s+activaci[oó]n'
+            if re.search(_KW_LICENSE_ACTIVATION, texto, re.IGNORECASE):
+                fecha = _parse_fecha_natural(texto)
+                if fecha:
+                    val_str = fecha.strftime("%Y-%m-%d")
+                    label_fecha = f"{_MESES_ES[fecha.month - 1].capitalize()} {fecha.year}"
+                    sql_snippet = sql_tpl.replace("{v}", val_str)
+                    detectados[param] = (label_fecha, 1.0, label, sql_snippet)
+            continue
+        # ─────────────────────────────────────────────────────────────────────
+
+        # ── Rama fecha de expiración de licencia: solo si el usuario la menciona ──
+        if filtro_key == "__license_expiration_date__":
+            _KW_LICENSE_EXPIRATION = r'expiraci[oó]n|expira|vence|vencimiento|fecha\s+de\s+expiraci[oó]n'
+            if re.search(_KW_LICENSE_EXPIRATION, texto, re.IGNORECASE):
+                fecha = _parse_fecha_natural(texto)
+                if fecha:
+                    val_str = fecha.strftime("%Y-%m-%d")
+                    label_fecha = f"{_MESES_ES[fecha.month - 1].capitalize()} {fecha.year}"
+                    sql_snippet = sql_tpl.replace("{v}", val_str)
+                    detectados[param] = (label_fecha, 1.0, label, sql_snippet)
+            continue
+        # ─────────────────────────────────────────────────────────────────────
+
+        # ── Rama fecha de actualización de licencia: solo si el usuario la menciona ──
+        if filtro_key == "__license_date_updated__":
+            _KW_LICENSE_DATE_UPDATED = r'actualizaci[oó]n|actualizada?|modificad[ao]|fecha\s+de\s+actualizaci[oó]n'
+            if re.search(_KW_LICENSE_DATE_UPDATED, texto, re.IGNORECASE):
                 fecha = _parse_fecha_natural(texto)
                 if fecha:
                     val_str = fecha.strftime("%Y-%m-%d")
