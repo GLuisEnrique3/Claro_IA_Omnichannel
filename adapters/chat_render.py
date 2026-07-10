@@ -113,7 +113,7 @@ def _fmt_otra(b: Bloque) -> str:
 
 def _fmt_resultado(b: Bloque) -> str:
     respuesta = (b.data or {}).get("respuesta", _limpiar(b.texto))
-    return f"*Resultado*\n{markdown_a_chat(respuesta)}"
+    return markdown_a_chat(respuesta)
 
 
 def _fmt_multiple_exec(b: Bloque) -> str:
@@ -122,7 +122,7 @@ def _fmt_multiple_exec(b: Bloque) -> str:
     if _debug_activo() and data.get("debug"):
         partes.append(f"```\n{data['debug']}\n```")
     respuesta = data.get("respuesta", _limpiar(b.texto))
-    partes.append(f"*Resultado*\n{markdown_a_chat(respuesta)}")
+    partes.append(markdown_a_chat(respuesta))
     return "\n\n".join(partes)
 
 
@@ -132,7 +132,7 @@ def _fmt_rag(b: Bloque) -> str:
     if data.get("carrier"):
         partes.append(f"_Carrier detectado: {data['carrier']}_")
     respuesta = data.get("respuesta", _limpiar(b.texto))
-    partes.append(f"*Resultado*\n{markdown_a_chat(respuesta)}")
+    partes.append(markdown_a_chat(respuesta))
     return "\n\n".join(partes)
 
 

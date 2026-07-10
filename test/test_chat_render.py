@@ -96,7 +96,8 @@ class TestFlujo:
     def test_resultado_formateado(self):
         bloque = Bloque("resultado", "\nRESULTADO:\n" + SEP + "\nHay 42 contratos.", data={"respuesta": "Hay 42 contratos."})
         texto = _render(bloque)
-        assert texto == "*Resultado*\nHay 42 contratos."
+        # Sin encabezado "*Resultado*" — se muestra la respuesta directa.
+        assert texto == "Hay 42 contratos."
 
     def test_confirmacion_muestra_mensaje_del_agente(self):
         # El mensaje de confirmación (Agente 1) se muestra tal cual, sin S/N.
@@ -259,7 +260,7 @@ class TestParseRag:
     def test_render_rag_con_card_de_documentos(self):
         bloque = Bloque("rag", _salida_rag_sintetica(), data=_parse_rag_salida(_salida_rag_sintetica()))
         texto, cards = chat_render.render_chat(FlowResult(bloques=[bloque]))
-        assert "*Resultado*\nLas comisiones se pagan el 15 de cada mes." in texto
+        assert "Las comisiones se pagan el 15 de cada mes." in texto
         assert "┌" not in texto
         assert len(cards) == 1
         assert cards[0]["card"]["header"]["title"] == "📄 Documentos consultados"
@@ -290,11 +291,11 @@ class TestParseMultiple:
         monkeypatch.delenv("FLOW_DEBUG", raising=False)
         bloque = Bloque("multiple_exec", "raw", data={"respuesta": "Resumen total.", "debug": "SELECT 1"})
         texto = _render(bloque)
-        assert texto == "*Resultado*\nResumen total."
+        assert texto == "Resumen total."
 
     def test_render_multiple_muestra_debug_con_flag(self, monkeypatch):
         monkeypatch.setenv("FLOW_DEBUG", "1")
         bloque = Bloque("multiple_exec", "raw", data={"respuesta": "Resumen total.", "debug": "SELECT 1"})
         texto = _render(bloque)
         assert "```\nSELECT 1\n```" in texto
-        assert "*Resultado*\nResumen total." in texto
+        assert "Resumen total." in texto
