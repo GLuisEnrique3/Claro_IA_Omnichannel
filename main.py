@@ -1289,7 +1289,7 @@ def ejecutar_rag(
         f"'Recuerda que si tu consulta no fue efectiva, puedes escribir \"escalar a un humano\"'."
         f"{entity_resolution_bloque}"
     )
-    print("RESPUESTA:")
+    #print("RESPUESTA:")
     _sep()
     _t_resp = time.perf_counter()
     try:
