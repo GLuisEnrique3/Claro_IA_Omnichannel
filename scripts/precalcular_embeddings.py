@@ -583,29 +583,77 @@ DOCUMENTS = [
         }
     },
      {
-        "filename": "ARC_OFF_EXCHANGES_FAQ.pdf",
+        "filename": "FAQ_ARC_OFF_EXCHANGES.pdf",
         "collection": "documentos_normativos",
         "chunking": "sliding",
         "metadata": {
-            "category": "faq"
+            "category": "faq_arc"
         }
     },
     {
-        "filename": "CLARO_INSURANCE_FAQ.pdf",
+        "filename": "FAQ_reconciliaciones.pdf",
         "collection": "documentos_normativos",
         "chunking": "sliding",
         "metadata": {
-            "category": "claro insurance faq"
+            "category": "faq_reconciliaciones"
         }
     },
     {
-        "filename": "Guia_Reconciliaciones_Cliente_RAG.pdf",
-        "collection": "reconciliaciones_faq",
+        "filename": "FAQ_Informacion_General_Claro_Insurance.pdf",
+        "collection": "documentos_normativos",
         "chunking": "sliding",
         "metadata": {
-            "category": "reconciliaciones"
+            "category": "faq_informacion_general"
         }
-    }
+    },
+    {
+        "filename": "FAQ_Liberacion_y_Terminacion_de_Contratos.pdf",
+        "collection": "documentos_normativos",
+        "chunking": "sliding",
+        "metadata": {
+            "category": "faq_liberacion_contratos"
+        }
+    },
+    {
+        "filename": "FAQ_Licencias_y_Credenciales.pdf",
+        "collection": "documentos_normativos",
+        "chunking": "sliding",
+        "metadata": {
+            "category": "faq_licencias"
+        }
+    },
+    {
+        "filename": "FAQ_Impacto_Regulatorio_y_Cambios_Operativos.pdf",
+        "collection": "documentos_normativos",
+        "chunking": "sliding",
+        "metadata": {
+            "category": "faq_impactos_regulatorios"
+        }
+    },
+    {
+        "filename": "FAQ_Soporte_Tecnico_y_Acceso_a_Portales.pdf",
+        "collection": "documentos_normativos",
+        "chunking": "sliding",
+        "metadata": {
+            "category": "faq_soporte_tecnico_acceso_portales"
+        }
+    },
+    {
+        "filename": "FAQ_Visibilidad_de_Clientes_y_Polizas_en_Plataforma.pdf",
+        "collection": "documentos_normativos",
+        "chunking": "sliding",
+        "metadata": {
+            "category": "faq_visibilidad_clientes_polizas"
+        }
+    },
+    {
+        "filename": "FAQ_Gestion_de_Agentes_y_Estructura_de_Agencia.pdf",
+        "collection": "documentos_normativos",
+        "chunking": "sliding",
+        "metadata": {
+            "category": "faq_gestion_agentes_estructura_agencia"
+        }
+    },
     ]
 
 

@@ -130,6 +130,22 @@ def cargar_filtros_desde_bq():
     """
     filtros["license_source"] = [row.Source__c for row in client.query(query_license_source).result()]
 
+    # License Class Name
+    query_license_class = """
+        SELECT DISTINCT LicenseClassName__c
+        FROM `claroinsurance-dataplatform.salesforce_raw.NIPRLicenses__c`
+        WHERE LicenseClassName__c IS NOT NULL
+    """
+    filtros["license_class"] = [row.LicenseClassName__c for row in client.query(query_license_class).result()]
+
+    # License Line of Authority
+    query_license_loa = """
+        SELECT DISTINCT LineOfAuthority__c
+        FROM `claroinsurance-dataplatform.salesforce_raw.NIPRLicenses__c`
+        WHERE LineOfAuthority__c IS NOT NULL
+    """
+    filtros["license_line_of_authority"] = [row.LineOfAuthority__c for row in client.query(query_license_loa).result()]
+
     # Contract Status
     query_contract_status = """
         SELECT DISTINCT Status__c

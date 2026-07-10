@@ -41,3 +41,9 @@ app/
 data/guided_flow_sessions.json
 data/conversation_history.json
 data/google_chat_users.json
+
+# Docs
+docs/
+
+CHANGELOG.md
+CHANGELOG_062626.md
