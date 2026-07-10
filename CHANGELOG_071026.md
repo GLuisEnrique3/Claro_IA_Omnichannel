@@ -92,10 +92,36 @@ encontrado`.
 
 ---
 
+## 4. Mensaje de "escalar a un humano" duplicado en cada respuesta
+
+`main.py` ya agrega, al final de **cualquier** respuesta RAG/SQL, una línea fija
+hardcodeada: `'Recuerda que si tu consulta no fue efectiva, puedes escribir "escalar a
+un humano"'` (prompts en las líneas ~1126-1128, ~1286-1289 y ~1452-1455). Sin embargo,
+las 32 entradas de `ending_resolution` en `use_cases.json` (todas las preexistentes y
+las 7 nuevas de la sección 1) **también** mencionaban "puedes escalar tu consulta a un
+humano" con su propia redacción, así que el usuario veía la invitación a escalar
+repetida dos veces al final de cada respuesta.
+
+**Fix:** se eliminó la cláusula de escalamiento de los 32 `ending_resolution`,
+conservando el resto de cada mensaje (invitación a reformular, links a módulos de ARC,
+etc.). La opción de escalar queda cubierta únicamente por la línea fija del código.
+Ejemplo (catálogo C, id 10):
+
+- Antes: *"Si tienes otra duda sobre la gestión de agentes o la estructura de tu
+  agencia, cuéntame más y te oriento. Si no queda resuelto, puedo escalar tu consulta a
+  un humano."*
+- Ahora: *"Si tienes otra duda sobre la gestión de agentes o la estructura de tu
+  agencia, cuéntame más y te oriento."*
+
+---
+
 ## Resumen de impacto
 
 - Catálogo C: 10 → **11** casos de uso.
 - Catálogo B: 15 → **14** casos de uso (se movió el 11 a C).
+- Las 32 entradas de `use_cases.json` ya no repiten la invitación a "escalar a un
+  humano" en su `ending_resolution` — esa opción se muestra una sola vez, vía la línea
+  fija de `main.py`.
 - 7 categorías FAQ nuevas + 1 renombrada (`faq_arc`) + 1 reubicada
   (`faq_reconciliaciones`), todas dentro de la colección única `documentos_normativos`.
 - `scripts/precalcular_embeddings.py`: de 3 entradas FAQ dispersas (2 colecciones
