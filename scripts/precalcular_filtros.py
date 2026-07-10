@@ -70,17 +70,17 @@ def cargar_filtros_desde_bq():
     query_stage_name = f"""
 
     SELECT DISTINCT StageName 
-    FROM `claroinsurance-dataplatform.claro_bi.dim_opp_stage`
+    FROM `claro_IA.vw_pending_contacts_contracts`
     """
     filtros["stage_name"] = [row.StageName for row in client.query(query_stage_name).result()]
 
     # Opp- Sub StageName
     query_sub_stage = f"""
 
-    SELECT DISTINCT Sub_stage
-    FROM `claroinsurance-dataplatform.claro_bi.dim_opp_stage`
+    SELECT DISTINCT Sub_Stage__c
+    FROM `claro_IA.vw_pending_contacts_contracts`
     """
-    filtros["sub_stage_name"] = [row.Sub_stage for row in client.query(query_sub_stage).result()]
+    filtros["sub_stage_name"] = [row.Sub_Stage__c for row in client.query(query_sub_stage).result()]
 
     # License State
     query_license_state = """

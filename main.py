@@ -390,7 +390,7 @@ Tu tarea:
      pregunta de confirmación).
 2. Si NO es una pregunta meta, elige el caso de uso (catalogo + id) cuya descripción
    "usa esto cuando" corresponda mejor a la intención de la consulta. Si ninguno
-   corresponde con claridad, indica que no se encontró.
+   corresponde con claridad, indica que no se encontró invitando a escalar a un humano para recibir asistencia adicional.
 3. Si no es meta y encontraste un caso de uso, redacta un mensaje breve en español,
    natural y conversacional, que diga qué entendiste que el usuario quiere consultar.
    NO comiences con un saludo genérico (ej. "Hola", "¡Hola!") — ve directo al mensaje.
@@ -1092,7 +1092,7 @@ def ejecutar_consulta(
             query_log.sql_exitoso = True
 
         if not rows:
-            return "No se encontraron resultados para su consulta."
+            return "No se encontraron resultados para su consulta. Recuerde que puede escalar a un humano si desea asistencia adicional."
 
         _MAX_FILAS_PROMPT = 50
         filas_truncadas = len(rows) > _MAX_FILAS_PROMPT
@@ -1243,7 +1243,7 @@ def ejecutar_rag(
 
     print()
     if not docs:
-        print("   No se encontraron documentos relacionados con tu consulta.")
+        print("   No se encontraron documentos relacionados con tu consulta. Recuerda que puedes escalar a un humano si deseas asistencia adicional.")
         return ""
     """
     print(f"📄 RESULTADOS ENCONTRADOS (Top {len(docs)}):")
