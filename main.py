@@ -55,7 +55,7 @@ TIPOS_USUARIO = {
         "sql_filtro": "AND a.Name_Agencies = '{valor}'",
         "catalogos": ["A", "B", "C"],
         "umbral": 0.65,
-        "prompt_id": "Ingrese el nombre de su agencia: ",
+        "prompt_id": "Ingresa el nombre de tu agencia: ",
     },
     "2": {
         "nombre": "Agente NPN",
@@ -63,7 +63,7 @@ TIPOS_USUARIO = {
         "sql_filtro": "AND c.NPN__c = '{valor}'",
         "catalogos": ["A", "B","C"],
         "umbral": 0.95,
-        "prompt_id": "Ingrese su NPN: ",
+        "prompt_id": "Ingresa tu NPN: ",
     },
 }
 
@@ -244,21 +244,21 @@ def _mostrar_instrucciones():
   ══════════════════════════════════════════════════════
 
   1. IDENTIFICACIÓN
-     Al ingresar, seleccione su tipo de usuario:
+     Al ingresar, selecciona tu tipo de usuario:
        1 — Representante de Agencia
-               Identifíquese con el nombre de su agencia.
-               Sus consultas se filtran automáticamente
+               Identifícate con el nombre de tu agencia.
+               Tus consultas se filtran automáticamente
                a los datos de esa agencia.
        2 — Agente NPN
-               Identifíquese con su número NPN.
-               Sus consultas se filtran a sus propios datos.
+               Identifícate con tu número NPN.
+               Tus consultas se filtran a tus propios datos.
 
   2. CONSULTA EN LENGUAJE NATURAL
-     Una vez identificado, escriba su consulta como si
-     le hablara a una persona. El sistema:
+     Una vez identificado, escribe tu consulta como si
+     le hablaras a una persona. El sistema:
        a) Detecta automáticamente el tema solicitado.
-       b) Extrae filtros mencionados en su consulta.
-       c) Le pide confirmación antes de ejecutar.
+       b) Extrae filtros mencionados en tu consulta.
+       c) Te pide confirmación antes de ejecutar.
        d) Devuelve el resultado con una explicación.
 
   ══════════════════════════════════════════════════════
@@ -860,14 +860,14 @@ def identificar_usuario() -> tuple[str, str, str | None, float | None]:
     while True:
         print("🔐 IDENTIFICACIÓN DE USUARIO")
         _sep()
-        print("Seleccione su tipo de usuario:")
+        print("Selecciona tu tipo de usuario:")
         for k, v in TIPOS_USUARIO.items():
             print(f"  {k}. {v['nombre']}")
         print()
         opcion = _input("Opción: ").strip()
 
         if opcion not in TIPOS_USUARIO:
-            print("⚠  Opción no válida. Intente nuevamente.\n")
+            print("⚠  Opción no válida. Intenta nuevamente.\n")
             continue
 
         tipo = TIPOS_USUARIO[opcion]
@@ -879,7 +879,7 @@ def identificar_usuario() -> tuple[str, str, str | None, float | None]:
         embs_pre = FILTROS_EMBEDDINGS.get(tipo["filtro_key"], {}).get("embeddings")
 
         if not candidatos:
-            print(f"⚠  Sin registros en filtro '{tipo['filtro_key']}'. Contacte al administrador.\n")
+            print(f"⚠  Sin registros en filtro '{tipo['filtro_key']}'. Contacta al administrador.\n")
             continue
 
         while True:
@@ -898,7 +898,7 @@ def identificar_usuario() -> tuple[str, str, str | None, float | None]:
             print(
                 f"⚠  Sin coincidencia para '{valor_input}' "
                 f"(mejor similitud: {score:.2f}, umbral: {tipo['umbral']:.2f}).\n"
-                "   Verifique e intente nuevamente.\n"
+                "   Verifica e intenta nuevamente.\n"
             )
 
 
@@ -1021,7 +1021,7 @@ def ejecutar_consulta(
     if pregunta.get("tipo") != "sql" or "sql_by_role" not in pregunta:
         return (
             "⚙  Esta opción se encuentra en proceso de implementación. "
-            "Gracias por su paciencia."
+            "Gracias por tu paciencia."
         )
 
     error_previo: str | None = None
@@ -1047,7 +1047,7 @@ def ejecutar_consulta(
                 query_log.sql_error = str(exc)
                 query_log.latencia_sql_ms = int((time.perf_counter() - _t_sql) * 1000)
             if intento == _MAX_REINTENTOS_SQL:
-                return "❌ No disponible. No fue posible construir la consulta con el modelo de IA."
+                return "No fue posible construir la consulta con el modelo de IA."
             continue
 
         if query_log:
@@ -1081,7 +1081,7 @@ def ejecutar_consulta(
             if intento == _MAX_REINTENTOS_SQL:
                 return (
                     "❌ No disponible. La consulta no pudo ejecutarse correctamente.\n"
-                    "Por favor intente reformular su solicitud."
+                    "Por favor intenta reformular tu solicitud."
                 )
             continue
 
@@ -1110,7 +1110,7 @@ def ejecutar_consulta(
             "- La consulta NO devolvió ningún resultado (0 filas). Indica claramente que no se "
             f"encontraron resultados asociados a la solicitud del usuario (\"{solicitud_display}\"), "
             "sin inventar datos ni asumir causas específicas del porqué. Sugiere brevemente revisar "
-            "los filtros mencionados (carrier, estado, período, etc.) por si alguno no aplica a su caso.\n"
+            "los filtros mencionados (carrier, estado, período, etc.) por si alguno no aplica a tu caso.\n"
             if sin_resultados else ""
         )
         prompt = (
@@ -1575,18 +1575,18 @@ def ciclo_consultas(
         else:
             _sep()
             print()
-            print("¿Qué desea consultar hoy?")
+            print("¿Qué deseas consultar hoy?")
             print()
-            user_query = _input("  Su consulta: ").strip()
+            user_query = _input("  Tu consulta: ").strip()
             if not user_query:
-                print("  Por favor ingrese una consulta.")
+                print("  Por favor ingresa una consulta.")
                 continue
 
         q = get_session().nueva_consulta()
         q.query_original = user_query
 
         print()
-        print("  Analizando su consulta...")
+        print("  Analizando tu consulta...")
 
         # ── Agente 1 + Agente 2: identificación del caso de uso y confirmación ────
         # El Agente 1 reescribe la consulta usando el último intercambio (pregunta +
@@ -1736,9 +1736,9 @@ def ciclo_consultas(
                 lbl_slash_pre = "/".join(labels_req_pre)
                 print()
                 print(f"  Esta consulta requiere identificar los siguientes filtros/entidades ({lbl_slash_pre}),")
-                print("  por favor reformule su pregunta considerando dichos filtros")
+                print("  por favor reformula tu pregunta considerando dichos filtros")
                 print()
-                nueva_query = _input("  Su consulta: ").strip()
+                nueva_query = _input("  Tu consulta: ").strip()
                 if not nueva_query:
                     raise VoverError
                 _next_query = nueva_query
@@ -1751,7 +1751,7 @@ def ciclo_consultas(
 
             if tipo_pregunta == "multiple":
                 print()
-                print("  Procesando su consulta, por favor espere...")
+                print("  Procesando tu consulta, por favor espera...")
                 respuesta_mostrada = ejecutar_multiple(
                     pregunta, use_case_entry["catalogo"], sql_filtro, filtro_fijo_key, user_query_efectiva,
                     entidades_previas, tipo_key=tipo_key, agency_name=agency_name,
@@ -1762,7 +1762,7 @@ def ciclo_consultas(
                 )
             else:
                 print()
-                print("  Procesando su consulta, por favor espere...")
+                print("  Procesando tu consulta, por favor espera...")
                 respuesta_mostrada = ejecutar_consulta(
                     pregunta, sql_filtro, entidades_previas, user_query_efectiva, query_log=q, tipo_key=tipo_key
                 )
