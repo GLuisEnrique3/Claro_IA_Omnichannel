@@ -1091,12 +1091,10 @@ def ejecutar_consulta(
             query_log.bq_filas = len(rows)
             query_log.sql_exitoso = True
 
-        if not rows:
-            return "No se encontraron resultados para su consulta. Recuerde que puede escalar a un humano si desea asistencia adicional."
-
+        sin_resultados = not rows
         _MAX_FILAS_PROMPT = 50
         filas_truncadas = len(rows) > _MAX_FILAS_PROMPT
-        tabla = _formatear_filas(rows[:_MAX_FILAS_PROMPT])
+        tabla = _formatear_filas(rows[:_MAX_FILAS_PROMPT]) if rows else "(la consulta no devolvió ninguna fila)"
         aviso_truncado = (
             f"\n[NOTA: Se muestran las primeras {_MAX_FILAS_PROMPT} filas de {len(rows)} totales. "
             "Indica al usuario que puede agregar filtros para acotar los resultados.]\n"
@@ -1107,6 +1105,13 @@ def ejecutar_consulta(
         entity_resolution_bloque = (
             f"\nFORMATO ESPECÍFICO DE RESPUESTA PARA ESTE CASO DE USO:\n{entity_resolution}\n"
             if entity_resolution else ""
+        )
+        sin_resultados_bloque = (
+            "- La consulta NO devolvió ningún resultado (0 filas). Indica claramente que no se "
+            f"encontraron resultados asociados a la solicitud del usuario (\"{solicitud_display}\"), "
+            "sin inventar datos ni asumir causas específicas del porqué. Sugiere brevemente revisar "
+            "los filtros mencionados (carrier, estado, período, etc.) por si alguno no aplica a su caso.\n"
+            if sin_resultados else ""
         )
         prompt = (
             f"Eres un asistente especializado de Claro Insurance.\n"
@@ -1122,6 +1127,7 @@ def ejecutar_consulta(
             f"- Si los datos son registros individuales (IDs, contratos, oportunidades): "
             f"NO los enumeres uno por uno. Solo indica cuántos se encontraron "
             f"y ofrece al usuario explorar detalles específicos si lo desea.\n"
+            f"{sin_resultados_bloque}"
             f"- Tutea siempre al usuario, usa 'tú' en lugar de 'usted'.\n"
             f"- Al final agrega estas dos líneas exactas, en este orden:\n"
             f"  '{pregunta.get('ending_resolution', 'Te invito a realizar otra pregunta para seguir explorando.')}'\n"
