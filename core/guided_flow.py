@@ -747,15 +747,26 @@ def _ejecutar_pendiente(session_key: str, session: dict) -> FlowResult:
             pregunta, use_case_entry["catalogo"], sql_filtro, filtro_fijo_key, user_query,
             entidades_previas, tipo_key=tipo_key, agency_name=agency_name,
         )
-        bloques.append(Bloque("multiple_exec", salida, data=_parse_resultado_multiple(salida)))
-        respuesta_mostrada = respuesta if isinstance(respuesta, str) else _parse_resultado_multiple(salida)["respuesta"]
+        data_mult = _parse_resultado_multiple(salida)
+        # ejecutar_multiple retorna el texto sintetizado; se prefiere sobre el
+        # parseo de stdout (que depende del marcador "RESULTADO:").
+        if isinstance(respuesta, str) and respuesta.strip():
+            data_mult["respuesta"] = respuesta.strip()
+        bloques.append(Bloque("multiple_exec", salida, data=data_mult))
+        respuesta_mostrada = data_mult["respuesta"]
     elif tipo_pregunta == "rag":
         salida, respuesta = _capturado(
             cli.ejecutar_rag,
             pregunta, user_query, query_log=q, agency_name=agency_name, tipo_key=tipo_key,
         )
-        bloques.append(Bloque("rag", salida, data=_parse_rag_salida(salida)))
-        respuesta_mostrada = respuesta if isinstance(respuesta, str) else _parse_rag_salida(salida)["respuesta"]
+        data_rag = _parse_rag_salida(salida)
+        # ejecutar_rag retorna el texto limpio de la respuesta; se prefiere sobre el
+        # parseo de stdout, que dependía del marcador "RESPUESTA:" (comentado en main.py).
+        # El parseo de stdout se conserva solo para extraer documentos y carrier.
+        if isinstance(respuesta, str) and respuesta.strip():
+            data_rag["respuesta"] = respuesta.strip()
+        bloques.append(Bloque("rag", salida, data=data_rag))
+        respuesta_mostrada = data_rag["respuesta"]
     else:
         bloques.append(Bloque("procesando", "\n  Procesando su consulta, por favor espere..."))
         salida, respuesta = _capturado(

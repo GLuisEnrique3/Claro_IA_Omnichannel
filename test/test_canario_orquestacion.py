@@ -42,7 +42,7 @@ HASHES_ESPERADOS = {
     "identificar_usuario":  ("b79fa2109c59cdc2", "core/guided_flow.py (_handle_ident_tipo, _handle_ident_valor)"),
     "ciclo_consultas":      ("d174cac674b24a9e", "core/guided_flow.py (_pipeline_consulta, _handle_confirm, _ejecutar_pendiente)"),
     "main":                 ("bb65e7d5aa2af899", "core/guided_flow.py (_completar_identificacion, iniciar_sesion)"),
-    "ejecutar_rag":         ("45656bf25748b8b0", "core/guided_flow.py (_parse_rag_salida — formato de prints parseado)"),
+    "ejecutar_rag":         ("5e6e5c2798e20fd6", "core/guided_flow.py (_parse_rag_salida + retorno usado como respuesta; ya no depende del marcador RESPUESTA:)"),
     "ejecutar_multiple":    ("c9fad1522d4e5807", "core/guided_flow.py (_parse_resultado_multiple — formato de prints parseado)"),
     "_mostrar_instrucciones": ("bafc476d2744faf3", "adapters/chat_render.py (_transformar_instrucciones — formato de pantalla parseado)"),
 }
