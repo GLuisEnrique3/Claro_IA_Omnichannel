@@ -67,15 +67,15 @@ class TestLimpieza:
     def test_prompts_de_terminal_se_omiten(self):
         texto = _render(
             Bloque("prompt_opcion", "Opción: "),
-            Bloque("prompt_consulta", "  Su consulta: "),
-            Bloque("status", "\n  Analizando su consulta..."),
-            Bloque("procesando", "\n  Procesando su consulta, por favor espere..."),
+            Bloque("prompt_consulta", "  Tu consulta: "),
+            Bloque("status", "\n  Analizando tu consulta..."),
+            Bloque("procesando", "\n  Procesando tu consulta, por favor espera..."),
         )
         assert texto == ""
 
     def test_menu_consulta_sin_separador(self):
-        texto = _render(Bloque("menu_consulta", SEP + "\n\n¿Qué desea consultar hoy?\n\n  Su consulta: "))
-        assert texto == "*¿Qué desea consultar hoy?*"
+        texto = _render(Bloque("menu_consulta", SEP + "\n\n¿Qué deseas consultar hoy?\n\n  Tu consulta: "))
+        assert texto == "*¿Qué deseas consultar hoy?*"
         assert "━" not in texto
 
     def test_ident_menu_usa_data(self):

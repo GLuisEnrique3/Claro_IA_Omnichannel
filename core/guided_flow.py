@@ -108,7 +108,7 @@ def _bloque_header() -> Bloque:
 
 
 def _bloque_menu_identificacion() -> Bloque:
-    lineas = ["🔐 IDENTIFICACIÓN DE USUARIO", _SEP, "Seleccione su tipo de usuario:"]
+    lineas = ["🔐 IDENTIFICACIÓN DE USUARIO", _SEP, "Selecciona tu tipo de usuario:"]
     for k, v in cli.TIPOS_USUARIO.items():
         lineas.append(f"  {k}. {v['nombre']}")
     lineas += ["", "Opción: "]
@@ -126,7 +126,7 @@ def _botones_identificacion() -> list[tuple[str, str]]:
 def _bloque_menu_consulta() -> Bloque:
     return Bloque(
         "menu_consulta",
-        "\n".join([_SEP, "", "¿Qué desea consultar hoy?", "", "  Su consulta: "]),
+        "\n".join([_SEP, "", "¿Qué deseas consultar hoy?", "", "  Tu consulta: "]),
     )
 
 
@@ -155,7 +155,7 @@ def _prompt_actual(session: dict) -> tuple[list[Bloque], list[tuple[str, str]] |
         tipo = cli.TIPOS_USUARIO[session["tipo_key"]]
         return [Bloque("prompt_valor", tipo["prompt_id"])], None
     if estado in ("QUERY", "REFORMULAR"):
-        return [Bloque("prompt_consulta", "  Su consulta: ")], None
+        return [Bloque("prompt_consulta", "  Tu consulta: ")], None
     if estado == "CONFIRM":
         pendiente = session.get("pendiente") or {}
         mensaje = pendiente.get("mensaje", "")
@@ -406,7 +406,7 @@ def _handle_ident_tipo(session_key: str, session: dict, texto: str) -> FlowResul
     opcion = texto.strip()
     if opcion not in cli.TIPOS_USUARIO:
         bloques = [
-            Bloque("invalida", "⚠  Opción no válida. Intente nuevamente.\n"),
+            Bloque("invalida", "⚠  Opción no válida. Intenta nuevamente.\n"),
             _bloque_menu_identificacion(),
         ]
         return FlowResult(bloques=bloques, botones=_botones_identificacion())
@@ -420,7 +420,7 @@ def _handle_ident_tipo(session_key: str, session: dict, texto: str) -> FlowResul
     candidatos = cli.FILTROS_VALIDOS.get(tipo["filtro_key"], [])
     if not candidatos:
         bloques = [
-            Bloque("invalida", f"⚠  Sin registros en filtro '{tipo['filtro_key']}'. Contacte al administrador.\n"),
+            Bloque("invalida", f"⚠  Sin registros en filtro '{tipo['filtro_key']}'. Contacta al administrador.\n"),
             _bloque_menu_identificacion(),
         ]
         return FlowResult(bloques=bloques, botones=_botones_identificacion())
@@ -451,7 +451,7 @@ def _handle_ident_valor(session_key: str, session: dict, texto: str) -> FlowResu
                 "ident_error",
                 f"⚠  Sin coincidencia para '{valor_input}' "
                 f"(mejor similitud: {score:.2f}, umbral: {tipo['umbral']:.2f}).\n"
-                "   Verifique e intente nuevamente.\n",
+                "   Verifica e intenta nuevamente.\n",
             ),
             Bloque("prompt_valor", tipo["prompt_id"]),
         ]
@@ -532,7 +532,7 @@ def _completar_identificacion(
 def _handle_query(session_key: str, session: dict, texto: str) -> FlowResult:
     if not texto:
         return FlowResult(bloques=[
-            Bloque("invalida", "  Por favor ingrese una consulta."),
+            Bloque("invalida", "  Por favor ingresa una consulta."),
             _bloque_menu_consulta(),
         ])
     return _pipeline_consulta(session_key, session, texto)
@@ -558,7 +558,7 @@ def _pipeline_consulta(session_key: str, session: dict, user_query: str) -> Flow
     q = logger.nueva_consulta()
     q.query_original = user_query
 
-    bloques: list[Bloque] = [Bloque("status", "\n  Analizando su consulta...")]
+    bloques: list[Bloque] = [Bloque("status", "\n  Analizando tu consulta...")]
 
     # El Agente 1 fusiona reescritura + clasificación en una sola llamada. El
     # historial solo se pasa en la primera clasificación del turno; las
@@ -730,8 +730,8 @@ def _ejecutar_pendiente(session_key: str, session: dict) -> FlowResult:
         bloques.append(Bloque(
             "filtros_requeridos",
             f"\n  Esta consulta requiere identificar los siguientes filtros/entidades ({lbl_slash_pre}),"
-            "\n  por favor reformule su pregunta considerando dichos filtros"
-            "\n\n  Su consulta: ",
+            "\n  por favor reformula tu pregunta considerando dichos filtros"
+            "\n\n  Tu consulta: ",
             data={"labels": lbl_slash_pre},
         ))
         session["state"] = "REFORMULAR"
@@ -741,7 +741,7 @@ def _ejecutar_pendiente(session_key: str, session: dict) -> FlowResult:
     q.reiniciar_timer()
 
     if tipo_pregunta == "multiple":
-        bloques.append(Bloque("procesando", "\n  Procesando su consulta, por favor espere..."))
+        bloques.append(Bloque("procesando", "\n  Procesando tu consulta, por favor espera..."))
         salida, respuesta = _capturado(
             cli.ejecutar_multiple,
             pregunta, use_case_entry["catalogo"], sql_filtro, filtro_fijo_key, user_query,
@@ -768,7 +768,7 @@ def _ejecutar_pendiente(session_key: str, session: dict) -> FlowResult:
         bloques.append(Bloque("rag", salida, data=data_rag))
         respuesta_mostrada = data_rag["respuesta"]
     else:
-        bloques.append(Bloque("procesando", "\n  Procesando su consulta, por favor espere..."))
+        bloques.append(Bloque("procesando", "\n  Procesando tu consulta, por favor espera..."))
         salida, respuesta = _capturado(
             cli.ejecutar_consulta,
             pregunta, sql_filtro, entidades_previas, user_query, query_log=q, tipo_key=tipo_key,

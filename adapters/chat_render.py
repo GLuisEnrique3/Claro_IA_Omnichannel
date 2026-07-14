@@ -5,7 +5,7 @@ El flujo guiado (core/guided_flow.py) emite Bloques semánticos cuyo `texto`
 es la réplica exacta del CLI (optimizada para terminal). Este módulo los
 convierte al formato nativo de Google Chat:
   - títulos en *negrita*, sin cajas ╔═╗ ni separadores ━━━
-  - prompts de terminal ("Opción:", "Su consulta:") eliminados — los botones
+  - prompts de terminal ("Opción:", "Tu consulta:") eliminados — los botones
     y las preguntas ya lo comunican
   - líneas #--DEBUG y SQL ocultos salvo FLOW_DEBUG=1
   - documentos RAG como card aparte con fuente, similitud y extracto
@@ -68,11 +68,11 @@ def _fmt_header(b: Bloque) -> str:
 def _fmt_ident_menu(b: Bloque) -> str:
     tipos = (b.data or {}).get("tipos", [])
     opciones = "\n".join(f"{k}. {nombre}" for k, nombre in tipos)
-    return f"*🔐 Identificación de usuario*\n\nSeleccione su tipo de usuario:\n{opciones}"
+    return f"*🔐 Identificación de usuario*\n\nSelecciona tu tipo de usuario:\n{opciones}"
 
 
 def _fmt_menu_consulta(b: Bloque) -> str:
-    return "*¿Qué desea consultar hoy?*"
+    return "*¿Qué deseas consultar hoy?*"
 
 
 def _fmt_debug(b: Bloque) -> str | None:

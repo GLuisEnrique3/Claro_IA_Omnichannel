@@ -82,7 +82,7 @@ class TestIdentificacion:
         resultado = guided_flow.step("gchat::s::u", "hola cualquier cosa")
         assert "SISTEMA DE CONSULTAS IA - BIENVENIDO" in resultado.texto
         assert "🔐 IDENTIFICACIÓN DE USUARIO" in resultado.texto
-        assert "Seleccione su tipo de usuario:" in resultado.texto
+        assert "Selecciona tu tipo de usuario:" in resultado.texto
         assert "  1. Representante de Agencia" in resultado.texto
         # Rol Management (tipo 3) eliminado: solo dos tipos de usuario.
         assert resultado.botones == [
@@ -94,8 +94,8 @@ class TestIdentificacion:
         key = "gchat::s::u"
         guided_flow.iniciar_sesion(key)
         resultado = guided_flow.step(key, "9")
-        assert resultado.lineas[0] == "⚠  Opción no válida. Intente nuevamente."
-        assert "Seleccione su tipo de usuario:" in resultado.texto
+        assert resultado.lineas[0] == "⚠  Opción no válida. Intenta nuevamente."
+        assert "Selecciona tu tipo de usuario:" in resultado.texto
 
     def test_tipo_1_pide_agencia_y_valida_semanticamente(self, monkeypatch):
         key = "gchat::s::u"
@@ -104,7 +104,7 @@ class TestIdentificacion:
         guided_flow.iniciar_sesion(key)
 
         resultado = guided_flow.step(key, "1")
-        assert resultado.lineas == ["Ingrese el nombre de su agencia: "]
+        assert resultado.lineas == ["Ingresa el nombre de tu agencia: "]
 
         resultado = guided_flow.step(key, "comfort")
         assert (
@@ -121,7 +121,7 @@ class TestIdentificacion:
 
         resultado = guided_flow.step(key, "xyz")
         assert "⚠  Sin coincidencia para 'xyz' (mejor similitud: 0.41, umbral: 0.65)." in resultado.texto
-        assert resultado.lineas[-1] == "Ingrese el nombre de su agencia: "
+        assert resultado.lineas[-1] == "Ingresa el nombre de tu agencia: "
 
 
 # ── Pipeline de consulta (Agente 1) ─────────────────────────────────────────────
@@ -131,7 +131,7 @@ class TestPipelineConsulta:
         _mock_agente1(monkeypatch, PREGUNTA_SQL, mensaje="Entiendo que quieres consultar Contratos Activos. ¿Es correcto?")
         resultado = guided_flow.step(sesion_lista, "cuantos contratos activos")
 
-        assert "  Analizando su consulta..." in resultado.lineas
+        assert "  Analizando tu consulta..." in resultado.lineas
         # El mensaje de confirmación lo redacta el Agente 1 (lenguaje natural).
         assert any("¿Es correcto?" in l for l in resultado.lineas)
         # Confirmación en lenguaje libre: sin botones.
@@ -144,7 +144,7 @@ class TestPipelineConsulta:
         resultado = guided_flow.step(sesion_lista, "quién eres")
 
         assert "Soy el asistente de Claro Insurance." in resultado.texto
-        assert "¿Qué desea consultar hoy?" in resultado.texto
+        assert "¿Qué deseas consultar hoy?" in resultado.texto
         # No hay nada que confirmar: vuelve directo a QUERY.
         session = guided_flow.session_store.load(sesion_lista)
         assert session["state"] == "QUERY"
@@ -171,7 +171,7 @@ class TestPipelineConsulta:
         resultado = guided_flow.step(sesion_lista, "sí")
 
         assert "  Esta consulta requiere identificar los siguientes filtros/entidades (Número de Póliza)," in resultado.lineas
-        assert resultado.lineas[-1] == "  Su consulta: "
+        assert resultado.lineas[-1] == "  Tu consulta: "
         session = guided_flow.session_store.load(sesion_lista)
         assert session["state"] == "REFORMULAR"
 
@@ -190,7 +190,7 @@ class TestConfirmacion:
         monkeypatch.setattr(cli, "ejecutar_consulta", lambda *a, **k: "Tienes 42 contratos activos.")
 
         resultado = guided_flow.step(sesion_lista, "sí, correcto")
-        assert "  Procesando su consulta, por favor espere..." in resultado.lineas
+        assert "  Procesando tu consulta, por favor espera..." in resultado.lineas
         assert "RESULTADO:" in resultado.lineas
         assert "Tienes 42 contratos activos." in resultado.lineas
         assert resultado.lineas[-1] == guided_flow._PROMPT_OTRA
@@ -283,17 +283,17 @@ class TestKeywordsGlobales:
     def test_nueva_sesion_reinicia_identificacion(self, sesion_lista):
         resultado = guided_flow.step(sesion_lista, "nueva sesión")
         assert "  Volviendo a la identificación de usuario..." in resultado.lineas
-        assert "Seleccione su tipo de usuario:" in resultado.texto
+        assert "Selecciona tu tipo de usuario:" in resultado.texto
 
     def test_instrucciones_muestra_pantalla_y_repregunta(self, sesion_lista):
         resultado = guided_flow.step(sesion_lista, "instrucciones")
         assert "INSTRUCCIONES DE USO" in resultado.texto
-        assert resultado.lineas[-1] == "  Su consulta: "
+        assert resultado.lineas[-1] == "  Tu consulta: "
 
     def test_saludo_responde_y_repregunta(self, sesion_lista):
         resultado = guided_flow.step(sesion_lista, "hola")
         assert "  ¡Hola! Soy tu asistente de Claro Insurance." in resultado.lineas
-        assert resultado.lineas[-1] == "  Su consulta: "
+        assert resultado.lineas[-1] == "  Tu consulta: "
 
     def test_escalar_en_proceso(self, sesion_lista):
         resultado = guided_flow.step(sesion_lista, "escalar")

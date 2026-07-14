@@ -39,12 +39,12 @@ HASHES_ESPERADOS = {
     "_input":               ("7a28cb180dfedc18", "core/guided_flow.py (_procesar: keywords globales, saludo, escalar)"),
     "seleccionar_caso_de_uso_llm": ("0ffda12255e2b50c", "core/guided_flow.py (_proponer_caso — Agente 1: reescritura+clasificación, 4-tupla, historial)"),
     "_interpretar_confirmacion":   ("b997685e262efc11", "core/guided_flow.py (_handle_confirm — Agente 2: confirmación libre)"),
-    "identificar_usuario":  ("b79fa2109c59cdc2", "core/guided_flow.py (_handle_ident_tipo, _handle_ident_valor)"),
-    "ciclo_consultas":      ("d174cac674b24a9e", "core/guided_flow.py (_pipeline_consulta, _handle_confirm, _ejecutar_pendiente)"),
+    "identificar_usuario":  ("f60ce0e24de7f5d8", "core/guided_flow.py (_handle_ident_tipo, _handle_ident_valor)"),
+    "ciclo_consultas":      ("78fe92e73f4c296d", "core/guided_flow.py (_pipeline_consulta, _handle_confirm, _ejecutar_pendiente)"),
     "main":                 ("bb65e7d5aa2af899", "core/guided_flow.py (_completar_identificacion, iniciar_sesion)"),
     "ejecutar_rag":         ("5e6e5c2798e20fd6", "core/guided_flow.py (_parse_rag_salida + retorno usado como respuesta; ya no depende del marcador RESPUESTA:)"),
     "ejecutar_multiple":    ("c9fad1522d4e5807", "core/guided_flow.py (_parse_resultado_multiple — formato de prints parseado)"),
-    "_mostrar_instrucciones": ("bafc476d2744faf3", "adapters/chat_render.py (_transformar_instrucciones — formato de pantalla parseado)"),
+    "_mostrar_instrucciones": ("c55738ec644d1e1e", "adapters/chat_render.py (_transformar_instrucciones — formato de pantalla parseado)"),
 }
 
 
