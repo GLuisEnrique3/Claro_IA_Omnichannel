@@ -36,7 +36,8 @@
             "o.Carrier",
             "o.State",
             "o.Line_Of_Business",
-            "nc.Status__c"
+            "nc.Status__c",
+            "nc.CreatedDate"
           ],
           "descripciones": {
             "c.NPN__c": "Número de productor nacional del agente (NPN). Identifica de forma única a cada agente de seguros.",
@@ -45,7 +46,8 @@
             "o.Carrier": "Compañía de seguros o aseguradora (ej. Humana, Ambetter, Aetna, Centene, Molina).",
             "o.State": "Estado de los Estados Unidos donde aplica el contrato (ej. Florida, Texas, Georgia).",
             "o.Line_Of_Business": "Línea de negocio o tipo de producto de seguros (ej. Medicare Advantage, ACA, Medicaid, DSNP).",
-            "nc.Status__c": "Estado del contrato Activos (.'Active', 'Active pending GA','JIT','Pending',' Pending release'). Inactivos son ('Inactive','Released')"
+            "nc.Status__c": "Estado del contrato Activos (.'Active', 'Active pending GA','JIT','Pending',' Pending release'). Inactivos son ('Inactive','Released')",
+            "nc.CreatedDate": "Fecha de aprobación del contrato."
           },
           "usa_esto_cuando": "El usuario pide la cantidad o total de sus contratos como UN SOLO NÚMERO, sin importar el estado (si no especifica estado, es el total general, NO asumas 'activos'). Aplica también si especifica el estado (activos/inactivos) o menciona un carrier, estado geográfico o línea de negocio puntual como filtro (ej. 'cuántos contratos activos tengo con Oscar en Florida' sigue siendo UN número, solo que filtrado). NO aplica si pide ver el listado/desglose agrupado en varias filas por carrier, estado o línea de negocio, ni si pregunta por la fecha de aprobación para eso usa Detalle de Contratos."
         },
