@@ -81,6 +81,48 @@ if __name__ == "__main__":
 
 ---
 
+## 4. Identificación de usuario: de texto libre (fuzzy) a login por Usuario ARC
+
+El login pedía escribir el nombre de la agencia o el NPN como texto libre, y lo
+resolvía por **similitud semántica** (embeddings) contra listas precalculadas
+(`data/filtros_validos.pkl`), con umbrales distintos por tipo (0.65 agencia, 0.95 NPN) y
+reintento si el score no alcanzaba. Se reemplazó por un login **exacto** contra el
+Usuario ARC (`Claro_ARC_User__c`), consultado en vivo a BigQuery.
+
+- **`app/auth.py` (nuevo):** `buscar_usuario_arc(claro_arc_user)` ejecuta una consulta
+  parametrizada (`@arc_user`, protegida contra inyección SQL vía
+  `bigquery.ScalarQueryParameter`) que hace `JOIN` de `contact` con `dim_account_2`,
+  `account_executives`, `NewBusinessTeam__c` y `ContractingSpecialist__c`, filtrando a
+  contactos con NPN y Usuario ARC no nulos, y limitados a la agencia "Claro Insurance" o
+  contactos con `Agency_Representative__c = 'Yes'`. El match contra `@arc_user` es
+  insensible a mayúsculas/espacios (`UPPER(TRIM(...))`). Devuelve `npn`, `name`,
+  `agency`, `subagencia`, `subsubagencia`, `arc_user` e `is_agency_representative`.
+- **`app/cli.py` — `identificar_usuario()`:** ahora pide una sola vez el Usuario ARC
+  (ya no hay prompt distinto por rol) y valida contra el resultado de
+  `buscar_usuario_arc`:
+  - Usuario ARC no encontrado → reintentar.
+  - Rol "Representante de Agencia" elegido pero `is_agency_representative` es `False` →
+    rechaza y sugiere entrar como "Agente NPN".
+  - El campo requerido por el rol (`npn` o `agency`) viene vacío en el contacto →
+    rechaza, pide contactar al administrador.
+  - Se eliminó la segunda consulta a BigQuery que antes resolvía la agencia del Agente
+    NPN por separado (`SELECT a.Name_Agencies ... WHERE c.NPN__c = ...`): ahora viene en
+    el mismo resultado de `buscar_usuario_arc`, sin importar el rol.
+- **`app/use_cases.py` — `TIPOS_USUARIO`:** se quitaron `umbral`/`prompt_id` (ya no
+  aplica fuzzy-match); se agregó `requiere_agency_representative` (`True` para
+  Representante, `False` para Agente NPN) y la constante `ARC_LOGIN_PROMPT`.
+- **`app/ui.py`:** instrucciones de la sección "IDENTIFICACIÓN" actualizadas para
+  reflejar el login único por Usuario ARC.
+
+**Pendiente/a confirmar:** el filtro fijo
+`(a.Name_Agencies = 'Claro Insurance' OR Agency_Representative__c = 'Yes')` limita el
+universo total de logins (ambos roles) a esos dos grupos — se implementó tal cual se
+especificó; si la intención era que cualquier agente con NPN pueda entrar como "Agente
+NPN" y solo el rol "Representante" se restrinja por `Agency_Representative__c`, hay que
+separar esa condición por rol en `_QUERY_ARC_USER`.
+
+---
+
 ## Resumen de impacto
 
 - `main.py`: 1859 líneas → **4 líneas** (entrypoint).
@@ -94,3 +136,7 @@ if __name__ == "__main__":
 - No se probó el flujo interactivo completo en consola (requiere input real y acceso a
   BigQuery/ChromaDB con datos) — pendiente correr `python main.py` con una consulta de
   prueba end-to-end.
+- Login rediseñado: de identificación por texto libre + similitud semántica, a
+  identificación exacta por Usuario ARC (`Claro_ARC_User__c`) resuelta en vivo contra
+  BigQuery (`app/auth.py`), con el rol (Agente NPN / Representante de Agencia)
+  determinando qué campo del mismo contacto se usa como filtro fijo de sesión.
