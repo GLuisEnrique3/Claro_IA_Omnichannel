@@ -50,7 +50,7 @@ Usuario (texto en español)
 | LLM SQL | Gemini 2.5 Pro (Vertex AI) | Generación de SQL para BigQuery |
 | Base de datos | Google BigQuery | Fuente de datos operativos |
 | Vector store | ChromaDB (local persistente) | RAG sobre documentos normativos |
-| Embeddings | `all-MiniLM-L6-v2` (SentenceTransformers) | Identificación de usuario (agencia/NPN) y extracción de entidades (carrier, estado, etc.) por similitud coseno — **no** se usa para detectar el caso de uso, eso lo hace el LLM directamente |
+| Embeddings | `all-MiniLM-L6-v2` (SentenceTransformers) | Extracción de entidades (carrier, estado, etc.) por similitud coseno — **no** se usa para identificación de usuario (login exacto por Usuario ARC) ni para detectar el caso de uso, eso lo hace el LLM directamente |
 | Logs | JSONL diario + tabla BigQuery | Trazabilidad y monitoreo |
 
 ### Interfaz
@@ -65,9 +65,22 @@ Usuario (texto en español)
 
 ```
 Omnichannel - Chroma/
-├── main.py                        # Núcleo de la aplicación (CLI)
+├── main.py                        # Entrypoint: from app.cli import main
 ├── .env                           # Variables de entorno (no se sube al repo)
 ├── env_example.txt                # Plantilla de variables de entorno
+│
+├── app/
+│   ├── auth.py                    # Login: buscar_usuario_arc — resuelve Claro_ARC_User__c contra BigQuery (NPN/Agencia)
+│   ├── llm.py                     # _llm_call (retry/backoff 429), _extraer_json
+│   ├── use_cases.py               # Carga use_cases.json / catalog_permissions.json, TIPOS_USUARIO, PARAM_TO_FILTRO
+│   ├── ui.py                      # Excepciones de control, _input, headers, instrucciones
+│   ├── embeddings.py              # SentenceTransformer, matching semántico, detección de carrier
+│   ├── entities.py                # Parser de fechas en español, extraer_entidades
+│   ├── classifier.py              # Agente 1 (selección de caso de uso) y Agente 2 (confirmación)
+│   ├── sql_engine.py              # Construcción de SQL con LLM + ejecución contra BigQuery
+│   ├── rag_engine.py              # Consulta RAG sobre ChromaDB
+│   ├── multi_query.py             # Orquesta sub-casos SQL+RAG en paralelo y sintetiza la respuesta
+│   └── cli.py                     # identificar_usuario, ciclo_consultas, main()
 │
 ├── config/
 │   ├── __init__.py                # Inicialización de Vertex AI y BigQuery
@@ -77,7 +90,7 @@ Omnichannel - Chroma/
 ├── data/
 │   ├── use_cases.json             # Definición de todos los casos de uso
 │   ├── catalog_permissions.json   # Permisos por tipo de usuario
-│   ├── filtros_validos.pkl        # Valores de filtros cacheados (de BigQuery)
+│   ├── filtros_validos.pkl        # Valores de filtros cacheados (de BigQuery, para entidades — no para login)
 │   └── filtros_embeddings.pkl     # Embeddings precalculados de filtros
 │
 ├── scripts/
@@ -207,14 +220,30 @@ libre hasta que se ejecute.
 
 ### Identificación de usuario
 
-El sistema reconoce dos tipos de usuario:
+El sistema reconoce dos roles:
 
 | Tipo | Descripción | Catálogos disponibles |
 |---|---|---|
 | 1 | Representante de Agencia | A, B, C |
 | 2 | Agente NPN | A, B, C |
 
-La identificación usa matching semántico (embeddings + umbral de confianza configurable entre 0.65 y 0.95 según el tipo).
+El login es por **Usuario ARC** (`Claro_ARC_User__c`), no por texto libre. El usuario
+elige su rol y escribe su Usuario ARC; `app/auth.py` (`buscar_usuario_arc`) lo resuelve
+con una consulta **exacta** en vivo a BigQuery (insensible a mayúsculas/espacios vía
+`UPPER(TRIM(...))`), uniendo `contact` con `dim_account_2` (agencia), `account_executives`,
+`NewBusinessTeam__c` y `ContractingSpecialist__c`. La consulta solo devuelve contactos con
+NPN y Usuario ARC asignados, que además pertenezcan a la agencia "Claro Insurance" o
+tengan `Agency_Representative__c = 'Yes'`.
+
+Según el rol elegido, se usa un campo distinto del mismo contacto resuelto como filtro
+fijo de sesión:
+- **Representante de Agencia**: requiere `Agency_Representative__c = 'Yes'` en el
+  contacto; usa `Name_Agencies` como filtro (`AND a.Name_Agencies = '{valor}'`).
+- **Agente NPN**: usa `NPN__c` como filtro (`AND c.NPN__c = '{valor}'`).
+
+Si el Usuario ARC no existe, el rol elegido no coincide con los permisos del contacto, o
+falta el campo requerido, se rechaza el ingreso y se pide reintentar — no hay
+coincidencia aproximada ni umbral de similitud en este paso.
 
 ### Pipeline de consulta
 
@@ -224,7 +253,7 @@ La identificación usa matching semántico (embeddings + umbral de confianza con
 
 3. **Agente 2 — Confirmación**: el LLM interpreta la respuesta del usuario al mensaje propuesto por el Agente 1 (confirmó / corrigió con una aclaración / rechazó sin más). Si no confirma, se usa su corrección (o su respuesta libre) para volver a clasificar con el Agente 1. **No hay límite de reintentos**: el ciclo sigue hasta que el usuario confirme explícitamente, o use un comando global (`salir`, `volver`, `nueva sesión`).
 
-4. **Extracción de entidades** (una vez confirmado el caso de uso): descompone la consulta en N-gramas (1 a 4 palabras) y los compara contra los embeddings de los valores válidos de cada filtro. Cada tipo de filtro tiene su propio umbral de similitud (`PARAM_TO_FILTRO` en `main.py`). Casos especiales:
+4. **Extracción de entidades** (una vez confirmado el caso de uso): descompone la consulta en N-gramas (1 a 4 palabras) y los compara contra los embeddings de los valores válidos de cada filtro. Cada tipo de filtro tiene su propio umbral de similitud (`PARAM_TO_FILTRO` en `app/use_cases.py`). Casos especiales:
    - **Fechas**: parser de expresiones en español ("el mes pasado", "mayo 2024", "hace 2 meses")
    - **Commission Month**: igual que fechas, pero solo se activa si el usuario menciona explícitamente "commission month" o "mes de comisión"
    - **NPN**: regex explícita ("NPN 1234567") con fallback a embeddings
